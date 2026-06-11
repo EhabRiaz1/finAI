@@ -89,8 +89,10 @@ function Terminal() {
               equities={equities}
               indices={indices}
               holdings={equityHoldings}
+              bonds={bondHoldings}
               balances={balances}
               watchlist={watchlist}
+              name={user?.user_metadata?.full_name || user?.user_metadata?.name}
               setActive={setActive}
               setSelected={setSelected}
             />

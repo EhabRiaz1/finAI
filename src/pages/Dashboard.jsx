@@ -7,8 +7,9 @@ import WatchlistCard from "../components/WatchlistCard";
 import NewsList from "../components/NewsList";
 import { usePerformance } from "../hooks/usePerformance";
 import { useNews } from "../hooks/useNews";
+import { marketValue as bondMarketValue } from "../lib/bonds";
 
-export default function Dashboard({ equities, indices, holdings, balances, watchlist, setActive, setSelected }) {
+export default function Dashboard({ equities, indices, holdings, bonds = [], balances, watchlist, name, setActive, setSelected }) {
   const quotesByTicker = useMemo(() => new Map(equities.map((e) => [e.ticker, e])), [equities]);
   const { series } = usePerformance(holdings);
   const { news } = useNews({ category: "general", limit: 7 });
@@ -32,14 +33,27 @@ export default function Dashboard({ equities, indices, holdings, balances, watch
   const cash = Number(balances?.cash ?? 0);
   const topPositions = rows.slice(0, 6);
 
+  const bondsMV = useMemo(
+    () => bonds.reduce((s, b) => s + bondMarketValue(b), 0),
+    [bonds],
+  );
+  const grandTotal = totalMV + bondsMV;
+
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const firstName = (name || "").trim().split(/\s+/)[0] || "there";
+
+  const valueCards = [
+    { label: "Total Value", value: grandTotal, accent: COLORS.amber, sub: "Equities + Bonds" },
+    { label: "Portfolio · Equities", value: totalMV, accent: COLORS.text, sub: `${rows.length} position${rows.length === 1 ? "" : "s"}` },
+    { label: "Bonds", value: bondsMV, accent: COLORS.cyan, sub: `${bonds.length} holding${bonds.length === 1 ? "" : "s"}` },
+  ];
 
   return (
     <div style={{ padding: 20, overflowY: "auto", height: "100%" }}>
       <div style={{ marginBottom: 18 }}>
         <div style={{ fontFamily: SERIF, fontSize: 32, color: COLORS.text, fontStyle: "italic" }}>
-          {greeting}, Omer.
+          {greeting}, {firstName}.
         </div>
         <div style={{ fontFamily: SANS, fontSize: 13, color: COLORS.textDim, marginTop: 4 }}>
           Portfolio value ${fmtMoney(totalMV + cash)} · Unrealized P&L{" "}
@@ -47,6 +61,27 @@ export default function Dashboard({ equities, indices, holdings, balances, watch
             {totalPnL >= 0 ? "+" : ""}${fmtMoney0(totalPnL)} ({totalCB ? fmtPct((totalPnL / totalCB) * 100) : "0%"})
           </span>
         </div>
+      </div>
+
+      {/* Portfolio value breakdown */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 14 }}>
+        {valueCards.map((c) => (
+          <div
+            key={c.label}
+            style={{ position: "relative", overflow: "hidden", background: COLORS.panel, border: `1px solid ${COLORS.border}`, padding: "16px 18px" }}
+          >
+            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 2, background: c.accent, opacity: 0.7 }} />
+            <div style={{ fontFamily: MONO, fontSize: 9, color: COLORS.textMute, letterSpacing: 1.5, textTransform: "uppercase" }}>
+              {c.label}
+            </div>
+            <div style={{ fontFamily: SERIF, fontSize: 30, color: COLORS.text, marginTop: 8, lineHeight: 1 }}>
+              ${fmtMoney0(c.value)}
+            </div>
+            <div style={{ fontFamily: MONO, fontSize: 10, color: COLORS.textDim, letterSpacing: 0.5, marginTop: 8 }}>
+              {c.sub}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Market overview */}
