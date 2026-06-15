@@ -1,21 +1,37 @@
 import React, { useMemo, useState } from "react";
-import { Area, AreaChart, CartesianGrid, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { COLORS, MONO } from "../lib/theme";
 
+const NASDAQ_COLOR = "#a78bfa"; // violet — distinct from amber/cyan on the dark chart
+
+// `days` slices the tail by trading-day count; `anchor` filters by a calendar
+// date computed from the latest data point (so it works with seeded history).
 const RANGES = [
+  { key: "1D", days: 1 },
+  { key: "1W", days: 5 },
+  { key: "MTD", anchor: "mtd" },
   { key: "1M", days: 21 },
-  { key: "3M", days: 63 },
-  { key: "6M", days: 126 },
+  { key: "YTD", anchor: "ytd" },
   { key: "1Y", days: 252 },
+  { key: "All", anchor: "all" },
 ];
 
+function sliceForRange(series, range) {
+  const r = RANGES.find((x) => x.key === range);
+  if (!r) return series;
+  if (r.days != null) return series.slice(-r.days);
+  if (r.anchor === "all") return series;
+  const lastDate = series[series.length - 1].date; // "YYYY-MM-DD"
+  const from = r.anchor === "mtd" ? `${lastDate.slice(0, 7)}-01` : `${lastDate.slice(0, 4)}-01-01`;
+  return series.filter((d) => d.date >= from);
+}
+
 export default function PerformanceChart({ series, height = 280 }) {
-  const [range, setRange] = useState("6M");
+  const [range, setRange] = useState("1Y");
 
   const data = useMemo(() => {
     if (!series?.length) return [];
-    const days = RANGES.find((r) => r.key === range)?.days ?? series.length;
-    const sliced = series.slice(-days);
+    const sliced = sliceForRange(series, range);
     if (!sliced.length) return [];
     // Re-base to 0% from the start of the visible window.
     const p0 = sliced[0].portfolio || 1;
@@ -57,13 +73,13 @@ export default function PerformanceChart({ series, height = 280 }) {
         <div style={{ display: "flex", gap: 18, padding: "8px 12px 0", fontFamily: MONO, fontSize: 11 }}>
           <Legendish color={COLORS.amber} label="Portfolio" value={last.Portfolio} />
           <Legendish color={COLORS.cyan} label="S&P 500" value={last["S&P 500"]} />
-          <Legendish color={COLORS.textDim} label="NASDAQ" value={last.NASDAQ} />
+          <Legendish color={NASDAQ_COLOR} label="NASDAQ" value={last.NASDAQ} />
         </div>
       )}
       <div style={{ height }}>
         {data.length ? (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ left: 4, right: 12, top: 12, bottom: 4 }}>
+            <ComposedChart data={data} margin={{ left: 4, right: 12, top: 12, bottom: 4 }}>
               <defs>
                 <linearGradient id="perfGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={COLORS.amber} stopOpacity={0.18} />
@@ -79,9 +95,9 @@ export default function PerformanceChart({ series, height = 280 }) {
                 formatter={(v) => `${Number(v).toFixed(2)}%`}
               />
               <Area type="monotone" dataKey="Portfolio" stroke={COLORS.amber} strokeWidth={1.8} fill="url(#perfGrad)" dot={false} />
-              <Line type="monotone" dataKey="S&P 500" stroke={COLORS.cyan} strokeWidth={1.2} dot={false} />
-              <Line type="monotone" dataKey="NASDAQ" stroke={COLORS.textDim} strokeWidth={1.2} dot={false} />
-            </AreaChart>
+              <Line type="monotone" dataKey="S&P 500" stroke={COLORS.cyan} strokeWidth={1.4} dot={false} />
+              <Line type="monotone" dataKey="NASDAQ" stroke={NASDAQ_COLOR} strokeWidth={1.4} dot={false} />
+            </ComposedChart>
           </ResponsiveContainer>
         ) : (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: COLORS.textDim, fontSize: 13 }}>

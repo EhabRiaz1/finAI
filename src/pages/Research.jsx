@@ -1,12 +1,21 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Search, Star } from "lucide-react";
+import { Search, Sparkles, Star } from "lucide-react";
 import { COLORS, fmtMcap, fmtMoney, fmtPct, MONO, SANS, SERIF } from "../lib/theme";
 import { Panel, PanelHeader, MetricCell } from "../components/ui";
-import { TVAdvancedChart, TVCompanyProfile, TVFundamentalData, TVScreener, TVSymbolInfo, TVTimeline } from "../components/TradingView";
+import { TVAdvancedChart, TVCompanyProfile, TVFundamentalData, TVScreener, TVSymbolInfo } from "../components/TradingView";
+import NewsList from "../components/NewsList";
+import { useChat } from "../ai/ChatProvider";
+import { useNews } from "../hooks/useNews";
+import { useStockRatings } from "../hooks/useStockRatings";
 
 export default function Research({ equities, holdings, watchlist, selected, setSelected }) {
   const [view, setView] = useState("quote"); // quote | financials | screener
   const [query, setQuery] = useState("");
+  const [recent, setRecent] = useState([]); // tickers searched this session
+  const [analyzing, setAnalyzing] = useState(false);
+
+  const { analyzeStock, streaming } = useChat();
+  const { ratingFor, reload: reloadRatings } = useStockRatings();
 
   const quotesByTicker = useMemo(() => new Map(equities.map((e) => [e.ticker, e])), [equities]);
 
@@ -15,27 +24,50 @@ export default function Research({ equities, holdings, watchlist, selected, setS
       ...holdings.map((h) => h.ticker),
       ...watchlist.items.map((w) => w.symbol),
       ...equities.map((e) => e.ticker),
+      ...recent,
     ]);
     return Array.from(set).sort();
-  }, [holdings, watchlist.items, equities]);
+  }, [holdings, watchlist.items, equities, recent]);
 
   const symbol = (selected || universe[0] || "AAPL").toUpperCase();
   const q = quotesByTicker.get(symbol);
   const held = holdings.find((h) => h.ticker === symbol);
+  const rating = ratingFor(symbol);
+
+  // Per-symbol company news (Finnhub-cached); fall back to general market news.
+  const { news: symbolNews } = useNews({ category: "company", symbols: [symbol], limit: 30 });
+  const { news: generalNews } = useNews({ category: "general", limit: 30 });
+  const eventsNews = symbolNews.length ? symbolNews : generalNews;
 
   useEffect(() => {
     if (!selected && universe.length) setSelected(universe[0]);
   }, [selected, universe, setSelected]);
 
-  const filtered = query
-    ? universe.filter((s) => s.includes(query.toUpperCase()))
-    : universe;
+  const upperQuery = query.trim().toUpperCase();
+  const filtered = query ? universe.filter((s) => s.includes(upperQuery)) : universe;
+  const noExactMatch = upperQuery && !universe.includes(upperQuery);
+
+  function pick(sym) {
+    const t = (sym ?? "").trim().toUpperCase();
+    if (!t) return;
+    setSelected(t);
+    setRecent((r) => (r.includes(t) ? r : [t, ...r]));
+    setQuery("");
+  }
 
   function submitSearch(e) {
     e.preventDefault();
-    if (query.trim()) {
-      setSelected(query.trim().toUpperCase());
-      setQuery("");
+    if (query.trim()) pick(query);
+  }
+
+  async function runAnalysis() {
+    if (analyzing || streaming) return;
+    setAnalyzing(true);
+    try {
+      await analyzeStock(symbol);
+      await reloadRatings();
+    } finally {
+      setAnalyzing(false);
     }
   }
 
@@ -51,11 +83,20 @@ export default function Research({ equities, holdings, watchlist, selected, setS
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search ticker…"
+            placeholder="Search any ticker…"
             style={{ flex: 1, background: "transparent", border: "none", color: COLORS.text, fontFamily: MONO, fontSize: 12, outline: "none" }}
           />
         </form>
         <div style={{ overflowY: "auto", flex: 1 }}>
+          {noExactMatch && (
+            <div
+              onClick={() => pick(upperQuery)}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 14px", cursor: "pointer", fontFamily: MONO, fontSize: 12, color: COLORS.amber, borderBottom: `1px solid ${COLORS.border}`, background: "rgba(245,165,36,0.05)" }}
+            >
+              <span>View {upperQuery}</span>
+              <span style={{ color: COLORS.textMute }}>→</span>
+            </div>
+          )}
           {filtered.map((s) => {
             const qq = quotesByTicker.get(s);
             const c = qq && qq.prev ? ((qq.price - qq.prev) / qq.prev) * 100 : 0;
@@ -63,7 +104,7 @@ export default function Research({ equities, holdings, watchlist, selected, setS
             return (
               <div
                 key={s}
-                onClick={() => setSelected(s)}
+                onClick={() => pick(s)}
                 style={{ display: "flex", justifyContent: "space-between", padding: "9px 14px", cursor: "pointer", fontFamily: MONO, fontSize: 12, background: isSel ? "rgba(245,165,36,0.07)" : "transparent", borderLeft: isSel ? `2px solid ${COLORS.amber}` : "2px solid transparent" }}
               >
                 <span style={{ color: isSel ? COLORS.amber : COLORS.text }}>{s}</span>
@@ -71,6 +112,9 @@ export default function Research({ equities, holdings, watchlist, selected, setS
               </div>
             );
           })}
+          {!filtered.length && !noExactMatch && (
+            <div style={{ padding: "14px", color: COLORS.textDim, fontFamily: SANS, fontSize: 12 }}>No matches.</div>
+          )}
         </div>
       </div>
 
@@ -108,9 +152,14 @@ export default function Research({ equities, holdings, watchlist, selected, setS
 
           {view === "quote" && (
             <>
-              <Panel style={{ marginBottom: 14 }}>
-                <TVSymbolInfo symbol={symbol} />
-                <TVAdvancedChart symbol={symbol} />
+              {rating && <RecommendationBadge rating={rating} />}
+
+              <Panel style={{ marginBottom: 14, overflow: "hidden" }}>
+                <TVSymbolInfo symbol={symbol} height={92} />
+              </Panel>
+
+              <Panel style={{ marginBottom: 14, overflow: "hidden" }}>
+                <TVAdvancedChart symbol={symbol} height={760} />
               </Panel>
 
               {/* Native quote stats from cached Finnhub data */}
@@ -141,15 +190,53 @@ export default function Research({ equities, holdings, watchlist, selected, setS
                 </Panel>
               )}
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                <Panel>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>
+                <Panel style={{ height: 460, overflow: "hidden", display: "flex", flexDirection: "column" }}>
                   <PanelHeader title="About" />
-                  <TVCompanyProfile symbol={symbol} />
+                  <div style={{ flex: 1, minHeight: 0 }}>
+                    <TVCompanyProfile symbol={symbol} height="100%" />
+                  </div>
                 </Panel>
-                <Panel>
-                  <PanelHeader title="News & Events" />
-                  <TVTimeline symbol={symbol} />
+                <Panel style={{ height: 460, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                  <PanelHeader title="News & Events" right={symbolNews.length ? symbol : "MARKET"} />
+                  <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+                    <NewsList news={eventsNews} emptyLabel={`No recent news for ${symbol}.`} />
+                  </div>
                 </Panel>
+              </div>
+
+              {/* Ask Finance AI for a deep-dive verdict on this stock */}
+              <div style={{ marginTop: 18, paddingBottom: 8 }}>
+                <button
+                  onClick={runAnalysis}
+                  disabled={analyzing || streaming}
+                  style={{
+                    all: "unset",
+                    boxSizing: "border-box",
+                    width: "100%",
+                    textAlign: "center",
+                    cursor: analyzing || streaming ? "wait" : "pointer",
+                    padding: "22px 0",
+                    border: `1px solid ${COLORS.amber}`,
+                    background: "rgba(245,165,36,0.06)",
+                    color: COLORS.amber,
+                    fontFamily: SERIF,
+                    fontStyle: "italic",
+                    fontSize: 22,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 12,
+                  }}
+                  onMouseEnter={(e) => { if (!analyzing && !streaming) e.currentTarget.style.background = "rgba(245,165,36,0.14)"; }}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(245,165,36,0.06)")}
+                >
+                  <Sparkles size={20} />
+                  {analyzing ? `Analyzing ${symbol}…` : `What does Finance AI think of ${symbol}?`}
+                </button>
+                <div style={{ fontFamily: SANS, fontSize: 11, color: COLORS.textMute, textAlign: "center", marginTop: 8 }}>
+                  Opens a deep-dive in the AI panel and saves a Buy / Hold / Sell verdict below the stock.
+                </div>
               </div>
             </>
           )}
@@ -164,6 +251,27 @@ export default function Research({ equities, holdings, watchlist, selected, setS
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+const RATING_TONE = { BUY: COLORS.up, HOLD: COLORS.amber, SELL: COLORS.down };
+
+function RecommendationBadge({ rating }) {
+  const tone = RATING_TONE[rating.rating] ?? COLORS.amber;
+  const when = rating.updated_at
+    ? new Date(rating.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : "";
+  return (
+    <div
+      style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", marginBottom: 14, border: `1px solid ${tone}`, background: `${tone}14` }}
+    >
+      <Sparkles size={16} color={tone} />
+      <div style={{ fontFamily: SANS, fontSize: 13.5, color: COLORS.text }}>
+        Finance AI recommends{" "}
+        <span style={{ fontFamily: MONO, fontWeight: 700, letterSpacing: 1, color: tone }}>{rating.rating}</span>
+      </div>
+      {when && <div style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 10, color: COLORS.textMute, letterSpacing: 0.5 }}>{when}</div>}
     </div>
   );
 }

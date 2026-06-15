@@ -36,7 +36,7 @@ function TVWidget({ src, config, height = 400 }) {
     <div
       ref={ref}
       className="tradingview-widget-container"
-      style={{ height, width: "100%", background: COLORS.bg }}
+      style={{ height, width: "100%", background: COLORS.bg, overflow: "hidden" }}
     />
   );
 }
@@ -47,7 +47,8 @@ export function TVAdvancedChart({ symbol, height = 460 }) {
       height={height}
       src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js"
       config={{
-        autosize: true,
+        width: "100%",
+        height,
         symbol,
         interval: "D",
         timezone: "America/New_York",
@@ -67,22 +68,22 @@ export function TVAdvancedChart({ symbol, height = 460 }) {
   );
 }
 
-export function TVSymbolInfo({ symbol }) {
+export function TVSymbolInfo({ symbol, height = 130 }) {
   return (
     <TVWidget
-      height={170}
+      height={height}
       src="https://s3.tradingview.com/external-embedding/embed-widget-symbol-info.js"
-      config={{ symbol, width: "100%", locale: "en", colorTheme: "dark", isTransparent: true }}
+      config={{ symbol, width: "100%", locale: "en", colorTheme: "dark", isTransparent: false }}
     />
   );
 }
 
-export function TVCompanyProfile({ symbol }) {
+export function TVCompanyProfile({ symbol, height = 440 }) {
   return (
     <TVWidget
-      height={390}
+      height={height}
       src="https://s3.tradingview.com/external-embedding/embed-widget-symbol-profile.js"
-      config={{ symbol, width: "100%", height: "100%", locale: "en", colorTheme: "dark", isTransparent: true }}
+      config={{ symbol, width: "100%", height: "100%", locale: "en", colorTheme: "dark", isTransparent: false }}
     />
   );
 }
@@ -126,16 +127,16 @@ export function TVTechnicalAnalysis({ symbol }) {
   );
 }
 
-export function TVTimeline({ symbol }) {
+export function TVTimeline({ symbol, height = 440 }) {
   return (
     <TVWidget
-      height={500}
+      height={height}
       src="https://s3.tradingview.com/external-embedding/embed-widget-timeline.js"
       config={{
         feedMode: symbol ? "symbol" : "market",
         symbol,
         market: symbol ? undefined : "stock",
-        isTransparent: true,
+        isTransparent: false,
         displayMode: "regular",
         width: "100%",
         height: "100%",
@@ -175,12 +176,12 @@ export function TVScreener({ height = 560 }) {
         width: "100%",
         height: "100%",
         defaultColumn: "overview",
-        defaultScreen: "most_capitalized",
+        defaultScreen: "general",
         market: "america",
         showToolbar: true,
         colorTheme: "dark",
         locale: "en",
-        isTransparent: true,
+        isTransparent: false,
       }}
     />
   );

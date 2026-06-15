@@ -190,6 +190,29 @@ export function ChatProvider({ children, onDataChanged }) {
     setDisplayItems([{ kind: "assistant_text", id: uid(), text: GREETING }]);
   }, []);
 
+  const renameConversation = useCallback(
+    async (id, title) => {
+      const clean = (title ?? "").trim();
+      if (!clean) return;
+      const { error } = await supabase
+        .from("ai_conversations")
+        .update({ title: clean.slice(0, 120) })
+        .eq("id", id);
+      if (!error) refreshConversations();
+    },
+    [refreshConversations],
+  );
+
+  const deleteConversation = useCallback(
+    async (id) => {
+      const { error } = await supabase.from("ai_conversations").delete().eq("id", id);
+      if (error) return;
+      if (id === conversationId) newChat(); // the open one was deleted
+      refreshConversations();
+    },
+    [conversationId, newChat, refreshConversations],
+  );
+
   /* --------------------------- streaming --------------------------- */
 
   const pushItem = useCallback((item) => {
@@ -309,6 +332,45 @@ export function ChatProvider({ children, onDataChanged }) {
     [streaming, ensureConversation, conversationId, pushItem, saveMessage, runStream],
   );
 
+  /**
+   * Deep-dive a single stock: open the side panel, ask the AI for a verdict,
+   * then parse + persist a Buy/Hold/Sell rating for the symbol. Returns the
+   * verdict (or null if none was produced).
+   */
+  const analyzeStock = useCallback(
+    async (symbol) => {
+      const sym = (symbol ?? "").toUpperCase();
+      if (!sym || streaming) return null;
+      setPanelOpen(true);
+      const prompt =
+        `Do a deep-dive investment analysis on ${sym}. Cover the business, recent ` +
+        `financials, valuation, key risks and catalysts, and how it fits my current ` +
+        `portfolio and any position I hold in it. Be specific and decisive. Finish with ` +
+        `exactly one line on its own, formatted precisely as: "RECOMMENDATION: BUY" or ` +
+        `"RECOMMENDATION: HOLD" or "RECOMMENDATION: SELL".`;
+      await sendMessage(prompt);
+
+      // Pull the most recent assistant text and parse the verdict line.
+      const msgs = apiMessagesRef.current;
+      let text = "";
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i].role === "assistant") {
+          const t = extractText(msgs[i].content);
+          if (t.trim()) { text = t; break; }
+        }
+      }
+      const match = text.match(/RECOMMENDATION:\s*(BUY|HOLD|SELL)/i);
+      if (!match) return null;
+      const rating = match[1].toUpperCase();
+      await supabase.from("ai_stock_ratings").upsert(
+        { symbol: sym, rating, rationale: text.slice(0, 1000), updated_at: new Date().toISOString() },
+        { onConflict: "user_id,symbol" },
+      );
+      return { symbol: sym, rating };
+    },
+    [streaming, sendMessage, setPanelOpen],
+  );
+
   /** Resolve a pending confirmation card. approvals: [{tool_use_id, approved, reason?}] */
   const resolveConfirmation = useCallback(
     async (itemId, approvals) => {
@@ -361,11 +423,14 @@ export function ChatProvider({ children, onDataChanged }) {
     conversations,
     flashIds,
     sendMessage,
+    analyzeStock,
     resolveConfirmation,
     abort,
     newChat,
     loadConversation,
     refreshConversations,
+    renameConversation,
+    deleteConversation,
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

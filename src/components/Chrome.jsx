@@ -9,6 +9,7 @@ import {
   LogOut,
   Newspaper,
   Search,
+  Shield,
   Wallet,
 } from "lucide-react";
 import { COLORS, fmtMoney, fmtPct, MONO, SANS, SERIF } from "../lib/theme";
@@ -126,13 +127,14 @@ export function TickerTape({ equities }) {
   );
 }
 
-export function Sidebar({ active, setActive }) {
+export function Sidebar({ active, setActive, isAdmin }) {
+  const nav = isAdmin ? [...NAV, { key: "admin", label: "Admin", icon: Shield }] : NAV;
   return (
     <div style={{ width: 200, borderRight: `1px solid ${COLORS.border}`, background: COLORS.bg, display: "flex", flexDirection: "column", padding: "16px 0" }}>
       <div style={{ padding: "0 18px 14px", fontFamily: MONO, fontSize: 9, color: COLORS.textMute, letterSpacing: 2 }}>
         WORKSPACE
       </div>
-      {NAV.map(({ key, label, icon: Icon }) => {
+      {nav.map(({ key, label, icon: Icon }) => {
         const isActive = active === key;
         return (
           <button

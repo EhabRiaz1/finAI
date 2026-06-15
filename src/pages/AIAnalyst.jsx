@@ -1,8 +1,9 @@
-import React from "react";
-import { Bot, SquarePen } from "lucide-react";
+import React, { useState } from "react";
+import { Bot, History, SquarePen } from "lucide-react";
 import { COLORS, MONO, SERIF } from "../lib/theme";
 import { useChat } from "../ai/ChatProvider";
 import ChatThread from "../ai/ChatThread";
+import ChatHistory from "../ai/ChatHistory";
 
 /* ------------------------------------------------------------------
    AI ANALYST — full-page chat. Shares conversation state with the
@@ -19,7 +20,8 @@ const SUGGESTIONS = [
 ];
 
 export default function AIAnalyst() {
-  const { conversations, conversationId, loadConversation, newChat, streaming } = useChat();
+  const { newChat, streaming } = useChat();
+  const [showHistory, setShowHistory] = useState(false);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -32,31 +34,14 @@ export default function AIAnalyst() {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {conversations.length > 0 && (
-            <select
-              value={conversationId ?? ""}
-              disabled={streaming}
-              onChange={(e) => e.target.value && loadConversation(e.target.value)}
-              style={{
-                background: COLORS.panel,
-                border: `1px solid ${COLORS.border}`,
-                color: COLORS.textDim,
-                fontFamily: MONO,
-                fontSize: 10,
-                padding: "6px 8px",
-                letterSpacing: 0.5,
-                outline: "none",
-                maxWidth: 260,
-              }}
-            >
-              <option value="">— history —</option>
-              {conversations.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title ?? "Untitled"}
-                </option>
-              ))}
-            </select>
-          )}
+          <button
+            onClick={() => setShowHistory((v) => !v)}
+            style={{ all: "unset", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", border: `1px solid ${showHistory ? COLORS.amberDim : COLORS.border}`, color: showHistory ? COLORS.amber : COLORS.textDim, fontFamily: MONO, fontSize: 10, letterSpacing: 1.2 }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.amber)}
+            onMouseLeave={(e) => (e.currentTarget.style.color = showHistory ? COLORS.amber : COLORS.textDim)}
+          >
+            <History size={12} /> HISTORY
+          </button>
           <button
             onClick={newChat}
             disabled={streaming}
@@ -69,8 +54,15 @@ export default function AIAnalyst() {
         </div>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0 }}>
-        <ChatThread suggestions={SUGGESTIONS} />
+      <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+        {showHistory && (
+          <div style={{ width: 280, flexShrink: 0, borderRight: `1px solid ${COLORS.border}`, minHeight: 0 }}>
+            <ChatHistory onSelect={() => setShowHistory(false)} />
+          </div>
+        )}
+        <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+          <ChatThread suggestions={SUGGESTIONS} />
+        </div>
       </div>
     </div>
   );

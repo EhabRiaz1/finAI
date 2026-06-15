@@ -31,7 +31,7 @@ export default function AddPositionModal({ onClose, onSubmit, initial }) {
   const [ticker, setTicker] = useState(initial?.ticker ?? "");
   const [shares, setShares] = useState(initial?.shares ?? "");
   const [costPerShare, setCostPerShare] = useState(initial?.cost_per_share ?? "");
-  const [purchaseDate, setPurchaseDate] = useState(initial?.purchase_date ?? new Date().toISOString().slice(0, 10));
+  const [purchaseDate, setPurchaseDate] = useState(initial?.purchase_date ?? "");
   const [side, setSide] = useState("buy");
   const [commission, setCommission] = useState("");
   const [notes, setNotes] = useState(initial?.notes ?? "");
@@ -104,7 +104,7 @@ export default function AddPositionModal({ onClose, onSubmit, initial }) {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
             <div>
-              <label style={labelStyle}>Trade Date</label>
+              <label style={labelStyle}>Trade Date (optional)</label>
               <input style={inputStyle} type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} />
             </div>
             <div>

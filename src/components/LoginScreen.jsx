@@ -1,10 +1,12 @@
 import React, { useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { COLORS, FONTS, MONO, SANS, SERIF } from "../lib/theme";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -80,16 +82,29 @@ export default function LoginScreen() {
               onBlur={(e) => (e.currentTarget.style.borderColor = COLORS.borderHi)}
             />
             <label style={{ fontFamily: MONO, fontSize: 9, color: COLORS.textDim, letterSpacing: 1.2 }}>PASSWORD</label>
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              style={{ ...inputStyle, marginTop: 6, marginBottom: 18 }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = COLORS.amberDim)}
-              onBlur={(e) => (e.currentTarget.style.borderColor = COLORS.borderHi)}
-            />
+            <div style={{ position: "relative", marginTop: 6, marginBottom: 18 }}>
+              <input
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={showPassword ? "password" : "••••••••"}
+                style={{ ...inputStyle, paddingRight: 42 }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = COLORS.amberDim)}
+                onBlur={(e) => (e.currentTarget.style.borderColor = COLORS.borderHi)}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                title={showPassword ? "Hide password" : "Show password"}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                style={{ all: "unset", cursor: "pointer", position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: COLORS.textMute, display: "flex", alignItems: "center" }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.amber)}
+                onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.textMute)}
+              >
+                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
             {error && (
               <div style={{ color: COLORS.down, fontSize: 12, marginBottom: 14 }}>{error}</div>
             )}

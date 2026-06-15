@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { COLORS, fmtMoney0, fmtNum, MONO, SANS, SERIF } from "../lib/theme";
+import { ExternalLink } from "lucide-react";
 import { Panel, PanelHeader, MetricCell } from "../components/ui";
-import { TVMiniSymbol, TVSymbolInfo } from "../components/TradingView";
 import AddBondForm from "../components/AddBondForm";
 import { annualIncome, bondAnalytics, marketValue, nominalValue, tvSymbol, yearsToMaturity } from "../lib/bonds";
 import { useChat } from "../ai/ChatProvider";
@@ -175,9 +175,21 @@ export default function Bonds({ bonds, onAddBond, onRefresh }) {
             <PanelHeader title={selected.name ?? selected.identifier} right={selected.rating ?? ""} />
             <div style={{ padding: 14 }}>
               {tvSymbol(selected) && (
-                <div style={{ marginBottom: 12 }}>
-                  <TVSymbolInfo symbol={tvSymbol(selected)} />
-                  <TVMiniSymbol symbol={tvSymbol(selected)} />
+                <div style={{ marginBottom: 14 }}>
+                  <a
+                    href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvSymbol(selected))}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "12px 14px", textDecoration: "none", border: `1px solid ${COLORS.amberDim}`, background: "rgba(245,165,36,0.05)" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(245,165,36,0.12)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(245,165,36,0.05)")}
+                  >
+                    <div>
+                      <div style={{ fontFamily: MONO, fontSize: 11, color: COLORS.amber, letterSpacing: 0.5 }}>View chart on TradingView</div>
+                      <div style={{ fontFamily: MONO, fontSize: 9, color: COLORS.textMute, letterSpacing: 0.5, marginTop: 3 }}>{tvSymbol(selected)}</div>
+                    </div>
+                    <ExternalLink size={15} color={COLORS.amber} strokeWidth={1.5} />
+                  </a>
                 </div>
               )}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>

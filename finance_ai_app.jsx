@@ -10,6 +10,7 @@ import Balances from "./src/pages/Balances";
 import Research from "./src/pages/Research";
 import PortfolioNews from "./src/pages/PortfolioNews";
 import AIAnalyst from "./src/pages/AIAnalyst";
+import Admin from "./src/pages/Admin";
 import { useMarketData } from "./src/hooks/useMarketData";
 import { useHoldings } from "./src/hooks/useHoldings";
 import { useBalances } from "./src/hooks/useBalances";
@@ -26,6 +27,7 @@ import { COLORS, FONTS, MONO, SERIF } from "./src/lib/theme";
 
 function Terminal() {
   const { user, signOut } = useAuth();
+  const isAdmin = (user?.email ?? "").toLowerCase() === "admin@finance.ai";
   const [active, setActive] = useState("dashboard");
   const [selected, setSelected] = useState(null);
   const [now, setNow] = useState(new Date());
@@ -82,7 +84,7 @@ function Terminal() {
       <TickerTape equities={equities} />
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        <Sidebar active={active} setActive={setActive} />
+        <Sidebar active={active} setActive={setActive} isAdmin={isAdmin} />
         <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
           {active === "dashboard" && (
             <Dashboard
@@ -121,6 +123,7 @@ function Terminal() {
           )}
           {active === "news" && <PortfolioNews holdings={equityHoldings} equities={equities} />}
           {active === "ai" && <AIAnalyst />}
+          {active === "admin" && isAdmin && <Admin />}
         </div>
       </div>
 

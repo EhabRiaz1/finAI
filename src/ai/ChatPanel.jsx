@@ -1,8 +1,9 @@
-import React from "react";
-import { Bot, Maximize2, SquarePen, X } from "lucide-react";
+import React, { useState } from "react";
+import { Bot, History, Maximize2, SquarePen, X } from "lucide-react";
 import { COLORS, MONO, SERIF } from "../lib/theme";
 import { useChat } from "./ChatProvider";
 import ChatThread from "./ChatThread";
+import ChatHistory from "./ChatHistory";
 
 /* ------------------------------------------------------------------
    Global slide-over chat panel — the AI is reachable from every page
@@ -12,6 +13,7 @@ import ChatThread from "./ChatThread";
 
 export default function ChatPanel({ onOpenFullPage }) {
   const { panelOpen, setPanelOpen, newChat } = useChat();
+  const [showHistory, setShowHistory] = useState(false);
 
   return (
     <div
@@ -48,7 +50,14 @@ export default function ChatPanel({ onOpenFullPage }) {
           ⌘J
         </div>
         <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
-          <IconButton title="New chat" onClick={newChat}>
+          <IconButton
+            title={showHistory ? "Back to chat" : "History"}
+            onClick={() => setShowHistory((v) => !v)}
+            active={showHistory}
+          >
+            <History size={14} />
+          </IconButton>
+          <IconButton title="New chat" onClick={() => { newChat(); setShowHistory(false); }}>
             <SquarePen size={14} />
           </IconButton>
           <IconButton
@@ -67,20 +76,24 @@ export default function ChatPanel({ onOpenFullPage }) {
       </div>
 
       <div style={{ flex: 1, minHeight: 0 }}>
-        <ChatThread compact />
+        {showHistory ? (
+          <ChatHistory onSelect={() => setShowHistory(false)} />
+        ) : (
+          <ChatThread compact />
+        )}
       </div>
     </div>
   );
 }
 
-function IconButton({ children, onClick, title }) {
+function IconButton({ children, onClick, title, active }) {
   return (
     <button
       onClick={onClick}
       title={title}
-      style={{ all: "unset", cursor: "pointer", padding: 6, color: COLORS.textDim, display: "flex", alignItems: "center" }}
+      style={{ all: "unset", cursor: "pointer", padding: 6, color: active ? COLORS.amber : COLORS.textDim, display: "flex", alignItems: "center" }}
       onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.amber)}
-      onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.textDim)}
+      onMouseLeave={(e) => (e.currentTarget.style.color = active ? COLORS.amber : COLORS.textDim)}
     >
       {children}
     </button>

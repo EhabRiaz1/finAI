@@ -57,15 +57,28 @@ export default function ChatThread({ suggestions = DEFAULT_SUGGESTIONS, compact 
   const { displayItems, streaming, statusLabel, sendMessage, resolveConfirmation, abort } = useChat();
   const [input, setInput] = useState("");
   const scrollRef = useRef(null);
+  const textareaRef = useRef(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [displayItems, statusLabel, streaming]);
 
+  // Auto-grow the composer up to a max height, then scroll.
+  const autosize = (el) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  };
+
+  useEffect(() => {
+    autosize(textareaRef.current);
+  }, [input]);
+
   const submit = (text) => {
     const value = (text ?? input).trim();
     if (!value || streaming) return;
     setInput("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
     sendMessage(value);
   };
 
@@ -162,9 +175,11 @@ export default function ChatThread({ suggestions = DEFAULT_SUGGESTIONS, compact 
       )}
 
       <div style={{ borderTop: `1px solid ${COLORS.border}`, padding: compact ? "12px 16px" : "14px 24px" }}>
-        <div style={{ maxWidth, margin: "0 auto", display: "flex", gap: 10, alignItems: "center" }}>
-          <input
+        <div style={{ maxWidth, margin: "0 auto", display: "flex", gap: 10, alignItems: "flex-end" }}>
+          <textarea
+            ref={textareaRef}
             value={input}
+            rows={1}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -173,7 +188,7 @@ export default function ChatThread({ suggestions = DEFAULT_SUGGESTIONS, compact 
               }
             }}
             placeholder="Ask, instruct, or report a trade — I can edit your portfolio…"
-            style={{ flex: 1, minWidth: 0, background: COLORS.panel, border: `1px solid ${COLORS.border}`, padding: "11px 13px", color: COLORS.text, fontFamily: SANS, fontSize: 13, outline: "none" }}
+            style={{ flex: 1, minWidth: 0, background: COLORS.panel, border: `1px solid ${COLORS.border}`, padding: "11px 13px", color: COLORS.text, fontFamily: SANS, fontSize: 13, outline: "none", resize: "none", maxHeight: 160, overflowY: "auto", lineHeight: 1.5, display: "block" }}
             onFocus={(e) => (e.currentTarget.style.borderColor = COLORS.amberDim)}
             onBlur={(e) => (e.currentTarget.style.borderColor = COLORS.border)}
           />

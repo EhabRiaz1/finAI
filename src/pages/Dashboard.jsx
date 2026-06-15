@@ -3,7 +3,6 @@ import { ChevronRight } from "lucide-react";
 import { COLORS, fmtMoney, fmtMoney0, fmtPct, MONO, SANS, SERIF } from "../lib/theme";
 import { Panel, PanelHeader, StatTile } from "../components/ui";
 import PerformanceChart from "../components/PerformanceChart";
-import WatchlistCard from "../components/WatchlistCard";
 import NewsList from "../components/NewsList";
 import { usePerformance } from "../hooks/usePerformance";
 import { useNews } from "../hooks/useNews";
@@ -128,23 +127,14 @@ export default function Dashboard({ equities, indices, holdings, bonds = [], bal
         </Panel>
       </div>
 
-      {/* Watchlist + trading news */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.6fr", gap: 14 }}>
-        <WatchlistCard
-          items={watchlist.items}
-          quotesByTicker={quotesByTicker}
-          onAdd={watchlist.add}
-          onRemove={watchlist.remove}
-          onSelect={(sym) => { setSelected?.(sym); setActive("research"); }}
+      {/* Trading news */}
+      <Panel style={{ display: "flex", flexDirection: "column" }}>
+        <PanelHeader
+          title="Trading News"
+          right={<span onClick={() => setActive("news")} style={{ cursor: "pointer", color: COLORS.amber, display: "inline-flex", alignItems: "center", gap: 4 }}>MORE <ChevronRight size={12} /></span>}
         />
-        <Panel style={{ display: "flex", flexDirection: "column" }}>
-          <PanelHeader
-            title="Trading News"
-            right={<span onClick={() => setActive("news")} style={{ cursor: "pointer", color: COLORS.amber, display: "inline-flex", alignItems: "center", gap: 4 }}>MORE <ChevronRight size={12} /></span>}
-          />
-          <NewsList news={news} />
-        </Panel>
-      </div>
+        <NewsList news={news} />
+      </Panel>
     </div>
   );
 }
