@@ -23,7 +23,15 @@ export default function Portfolio({ equities, holdings, transactions, onAddEquit
   const flashIds = useChat()?.flashIds; // rows the AI just changed
 
   const quotesByTicker = useMemo(() => new Map(equities.map((e) => [e.ticker, e])), [equities]);
-  const { byTicker, portfolio } = usePortfolioMetrics(holdings);
+  const marketValuesByTicker = useMemo(() => {
+    const mv = {};
+    for (const h of holdings ?? []) {
+      const q = quotesByTicker.get(h.ticker);
+      mv[h.ticker] = (q?.price ?? 0) * Number(h.shares);
+    }
+    return mv;
+  }, [holdings, quotesByTicker]);
+  const { byTicker, portfolio } = usePortfolioMetrics(holdings, marketValuesByTicker);
 
   const rows = useMemo(() => {
     return holdings

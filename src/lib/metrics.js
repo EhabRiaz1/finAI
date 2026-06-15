@@ -5,6 +5,30 @@
 
 const TRADING_DAYS = 252;
 
+export const DEFAULT_RF = 0.0428;
+export const DEFAULT_MRP = 0.05;
+
+/** Forward-looking CAPM expected return: Re = Rf + beta * MRP. */
+export function capmExpectedReturn(beta, rf = DEFAULT_RF, mrp = DEFAULT_MRP) {
+  if (beta == null) return null;
+  return rf + beta * mrp;
+}
+
+/** Market-value-weighted portfolio beta from per-position betas. */
+export function weightedBeta(positions) {
+  let totalMV = 0;
+  let weighted = 0;
+  let hasBeta = false;
+  for (const { beta: b, marketValue: mv } of positions) {
+    if (b == null || !mv) continue;
+    totalMV += mv;
+    weighted += b * mv;
+    hasBeta = true;
+  }
+  if (!hasBeta || !totalMV) return null;
+  return weighted / totalMV;
+}
+
 /** Daily simple returns from a price series (oldest -> newest). */
 export function toReturns(prices) {
   const r = [];
@@ -45,20 +69,17 @@ export function beta(assetRet, benchRet) {
 }
 
 /**
- * CAPM expected (required) annual return: Re = Rf + beta*(Rm - Rf),
- * where Rm is the realized annualized benchmark return over the window.
- * rf is an annual rate, e.g. 0.0428.
+ * @deprecated Use capmExpectedReturn(beta, rf, mrp) with a fixed market risk premium.
  */
-export function capm(assetRet, benchRet, rf = 0.0428) {
-  const b = beta(assetRet, benchRet);
-  const rm = mean(benchRet) * TRADING_DAYS;
-  return rf + b * (rm - rf);
+export function capm(assetRet, benchRet, rf = DEFAULT_RF, mrp = DEFAULT_MRP) {
+  return capmExpectedReturn(beta(assetRet, benchRet), rf, mrp);
 }
 
 /** Annualized Jensen's alpha = realized return minus CAPM expected return. */
-export function alpha(assetRet, benchRet, rf = 0.0428) {
+export function alpha(assetRet, benchRet, rf = DEFAULT_RF, mrp = DEFAULT_MRP) {
   const ra = mean(assetRet) * TRADING_DAYS;
-  return ra - capm(assetRet, benchRet, rf);
+  const b = beta(assetRet, benchRet);
+  return ra - capmExpectedReturn(b, rf, mrp);
 }
 
 /** Annualized volatility. */
@@ -67,7 +88,7 @@ export function volatility(assetRet) {
 }
 
 /** Annualized Sharpe ratio. */
-export function sharpe(assetRet, rf = 0.0428) {
+export function sharpe(assetRet, rf = DEFAULT_RF) {
   const vol = stdev(assetRet);
   if (!vol) return 0;
   const excessDaily = mean(assetRet) - rf / TRADING_DAYS;
@@ -102,15 +123,16 @@ export function cumulative(returns, base = 100) {
  * Compute a full metric set for a position/portfolio given aligned price arrays.
  * prices and bench are arrays of daily closes (oldest -> newest).
  */
-export function computeMetrics(prices, bench, rf = 0.0428) {
+export function computeMetrics(prices, bench, rf = DEFAULT_RF, mrp = DEFAULT_MRP) {
   if (!prices || prices.length < 5) return null;
   const aRet = toReturns(prices);
   const bRet = bench && bench.length >= 5 ? toReturns(bench) : [];
   const cum = cumulative(aRet);
+  const b = bRet.length ? beta(aRet, bRet) : null;
   return {
-    beta: bRet.length ? beta(aRet, bRet) : null,
-    alpha: bRet.length ? alpha(aRet, bRet, rf) : null,
-    capm: bRet.length ? capm(aRet, bRet, rf) : null,
+    beta: b,
+    alpha: b != null ? alpha(aRet, bRet, rf, mrp) : null,
+    capm: capmExpectedReturn(b, rf, mrp),
     volatility: volatility(aRet),
     sharpe: sharpe(aRet, rf),
     maxDrawdown: maxDrawdown(cum),
