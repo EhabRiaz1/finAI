@@ -13,6 +13,9 @@ export interface ToolOutcome {
   content: string;
   is_error?: boolean;
   changes?: { table: string; op: "insert" | "update" | "delete"; ids: string[] }[];
+  // Staged spreadsheet edits — index.ts streams these as an `artifact_edit`
+  // SSE event; nothing is persisted until the user clicks Apply client-side.
+  artifactEdit?: { artifact_id: string; sheet: number; edits: { row: number; col: number; value: unknown; old: unknown }[] };
 }
 
 const S = (desc: string, props: Record<string, unknown>, required: string[] = []) => ({
@@ -240,6 +243,68 @@ export const TOOLS = [
       ["symbol"],
     ),
   },
+  {
+    name: "get_artifact_overview",
+    ...S(
+      "Shape of an open spreadsheet artifact: each sheet's name, dimensions, and header row. Call before reading or editing a large sheet so you target the right cells.",
+      { artifact_id: str("The artifact id from the active-spreadsheet context note.") },
+      ["artifact_id"],
+    ),
+  },
+  {
+    name: "read_artifact",
+    ...S(
+      "Read cells from an open spreadsheet artifact. Returns the whole active sheet (capped) or a specific A1 range like 'A1:D20'. Inspect data here before proposing edits.",
+      {
+        artifact_id: str("The artifact id."),
+        range: str("Optional A1 range, e.g. 'A1:D20'. Omit for the whole sheet (capped)."),
+        sheet: num("Optional 0-based sheet index. Defaults to the active sheet."),
+      },
+      ["artifact_id"],
+    ),
+  },
+  {
+    name: "set_cells",
+    ...S(
+      "Propose edits to individual cells of a spreadsheet artifact. Edits appear as a STAGED preview in the user's grid which they Apply or Discard — they do NOT auto-save. Give each edit as {cell:'B4', value:1500} (A1) or {row,col,value} (0-based).",
+      {
+        artifact_id: str("The artifact id."),
+        edits: {
+          type: "array",
+          description: "Cell edits.",
+          items: {
+            type: "object",
+            properties: {
+              cell: str("A1 ref e.g. 'B4' (or use row+col)."),
+              row: num("0-based row index (with col)."),
+              col: num("0-based column index (with row)."),
+              value: { type: ["string", "number", "null"], description: "New cell value." },
+            },
+            additionalProperties: false,
+          },
+        },
+        sheet: num("Optional 0-based sheet index. Defaults to the active sheet."),
+      },
+      ["artifact_id", "edits"],
+    ),
+  },
+  {
+    name: "set_range",
+    ...S(
+      "Propose edits to a rectangular range, top-left anchored at an A1 cell, filled row-major from a 2D values array. Staged like set_cells (Apply/Discard).",
+      {
+        artifact_id: str("The artifact id."),
+        start: str("Top-left A1 cell, e.g. 'B2'."),
+        values: {
+          type: "array",
+          description: "2D array of row arrays.",
+          items: { type: "array", items: { type: ["string", "number", "null"] } },
+        },
+        sheet: num("Optional 0-based sheet index."),
+      },
+      ["artifact_id", "start", "values"],
+    ),
+  },
 ] as const;
 
 export const WRITE_TOOLS = new Set([
@@ -280,6 +345,10 @@ export const TOOL_STATUS: Record<string, string> = {
   update_buying_power: "Updating balances…",
   add_to_watchlist: "Updating watchlist…",
   remove_from_watchlist: "Updating watchlist…",
+  get_artifact_overview: "Inspecting the spreadsheet…",
+  read_artifact: "Reading the spreadsheet…",
+  set_cells: "Proposing cell edits…",
+  set_range: "Proposing edits…",
 };
 
 /** Short human-readable action label for confirmation cards. */
@@ -324,6 +393,40 @@ function downsample(rows: { date: string }[], interval: string) {
   const byKey = new Map<string, { date: string }>();
   for (const r of rows) byKey.set(keyOf(r.date), r); // rows sorted asc → keeps last of period
   return [...byKey.values()];
+}
+
+/* ---- spreadsheet artifact helpers (Deno-side A1 addressing) ---- */
+function letterColD(letters: string): number {
+  let n = 0;
+  for (const ch of letters.toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n - 1;
+}
+function colLetterD(idx: number): string {
+  let n = idx;
+  let s = "";
+  do {
+    s = String.fromCharCode(65 + (n % 26)) + s;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return s;
+}
+function parseA1D(ref: string): { row: number; col: number } | null {
+  const m = String(ref ?? "").trim().match(/^([A-Za-z]+)(\d+)$/);
+  if (!m) return null;
+  return { row: parseInt(m[2], 10) - 1, col: letterColD(m[1]) };
+}
+function formatA1D(row: number, col: number): string {
+  return `${colLetterD(col)}${row + 1}`;
+}
+// deno-lint-ignore no-explicit-any
+async function loadArtifactSheet(sb: Sb, id: string, sheetParam: unknown): Promise<{ data: any; sheetIdx: number; sheet: any } | { error: string }> {
+  const { data: row, error } = await sb.from("ai_artifacts").select("id, data").eq("id", id).single();
+  if (error || !row) return { error: "Artifact not found (or not yours)." };
+  const data = row.data;
+  const sheetIdx = sheetParam != null ? Number(sheetParam) : (data?.activeSheet ?? 0);
+  const sheet = data?.sheets?.[sheetIdx];
+  if (!sheet) return { error: `Sheet ${sheetIdx} not found.` };
+  return { data, sheetIdx, sheet };
 }
 
 export async function executeTool(sb: Sb, name: string, input: Record<string, unknown>): Promise<ToolOutcome> {
@@ -631,6 +734,84 @@ export async function executeTool(sb: Sb, name: string, input: Record<string, un
         if (error) return fail(error.message);
         return ok({ removed: sym }, [{ table: "watchlist", op: "delete", ids: [] }]);
       }
+      case "get_artifact_overview": {
+        const { data: row, error } = await sb.from("ai_artifacts").select("id, name, data").eq("id", String(input.artifact_id)).single();
+        if (error || !row) return fail("Artifact not found (or not yours).");
+        // deno-lint-ignore no-explicit-any
+        const sheets = (row.data?.sheets ?? []).map((s: any, i: number) => ({
+          index: i,
+          name: s.name,
+          rows: s.rows?.length ?? 0,
+          cols: (s.rows ?? []).reduce((w: number, r: unknown[]) => Math.max(w, r.length), 0),
+          header: (s.rows?.[0] ?? []).map((c: unknown) => (c == null ? "" : String(c))),
+        }));
+        return ok({ name: row.name, active_sheet: row.data?.activeSheet ?? 0, sheets });
+      }
+
+      case "read_artifact": {
+        const res = await loadArtifactSheet(sb, String(input.artifact_id), input.sheet);
+        if ("error" in res) return fail(res.error);
+        const rows: unknown[][] = res.sheet.rows ?? [];
+        let r0 = 0, c0 = 0, r1 = rows.length - 1, c1 = rows.reduce((w, r) => Math.max(w, r.length), 0) - 1;
+        if (input.range) {
+          const [a, b] = String(input.range).split(":");
+          const pa = parseA1D(a);
+          const pb = b ? parseA1D(b) : pa;
+          if (!pa || !pb) return fail("Invalid range. Use A1 form like 'A1:D20'.");
+          r0 = Math.min(pa.row, pb.row); r1 = Math.max(pa.row, pb.row);
+          c0 = Math.min(pa.col, pb.col); c1 = Math.max(pa.col, pb.col);
+        }
+        const cells = (r1 - r0 + 1) * (c1 - c0 + 1);
+        if (cells > 4000) return fail(`Range too large (${cells} cells). Request a smaller A1 range; the sheet is ${rows.length}×${c1 - c0 + 1}.`);
+        const out = [];
+        for (let r = r0; r <= r1 && r < rows.length; r++) {
+          out.push((rows[r] ?? []).slice(c0, c1 + 1).map((v) => (v === undefined ? null : v)));
+        }
+        return ok({ sheet: res.sheetIdx, name: res.sheet.name, anchor: formatA1D(r0, c0), rows: out });
+      }
+
+      case "set_cells": {
+        const res = await loadArtifactSheet(sb, String(input.artifact_id), input.sheet);
+        if ("error" in res) return fail(res.error);
+        const rows: unknown[][] = res.sheet.rows ?? [];
+        const edits: { row: number; col: number; value: unknown; old: unknown }[] = [];
+        for (const e of (input.edits as Record<string, unknown>[]) ?? []) {
+          let r: number, c: number;
+          if (e.cell != null) { const a = parseA1D(String(e.cell)); if (!a) continue; r = a.row; c = a.col; }
+          else if (e.row != null && e.col != null) { r = Number(e.row); c = Number(e.col); }
+          else continue;
+          if (r < 0 || c < 0) continue;
+          edits.push({ row: r, col: c, value: e.value ?? null, old: rows[r]?.[c] ?? null });
+        }
+        if (!edits.length) return fail("No valid edits — give cells as {cell:'B4',value:…} or {row,col,value}.");
+        return {
+          content: JSON.stringify({ staged: edits.length, applied: edits.map((x) => ({ cell: formatA1D(x.row, x.col), from: x.old, to: x.value })) }),
+          artifactEdit: { artifact_id: String(input.artifact_id), sheet: res.sheetIdx, edits },
+        };
+      }
+
+      case "set_range": {
+        const res = await loadArtifactSheet(sb, String(input.artifact_id), input.sheet);
+        if ("error" in res) return fail(res.error);
+        const rows: unknown[][] = res.sheet.rows ?? [];
+        const anchor = parseA1D(String(input.start));
+        if (!anchor) return fail("Invalid 'start' — use an A1 cell like 'B2'.");
+        const values = input.values as unknown[][];
+        if (!Array.isArray(values)) return fail("'values' must be a 2D array.");
+        const edits: { row: number; col: number; value: unknown; old: unknown }[] = [];
+        values.forEach((rowVals, dr) => {
+          (rowVals ?? []).forEach((value, dc) => {
+            const r = anchor.row + dr, c = anchor.col + dc;
+            edits.push({ row: r, col: c, value: value ?? null, old: rows[r]?.[c] ?? null });
+          });
+        });
+        if (!edits.length) return fail("No values to set.");
+        return {
+          content: JSON.stringify({ staged: edits.length, start: formatA1D(anchor.row, anchor.col), rows: values.length }),
+          artifactEdit: { artifact_id: String(input.artifact_id), sheet: res.sheetIdx, edits },
+        };
+      }
+
       default:
         return fail(`Unknown tool: ${name}`);
     }

@@ -7,6 +7,7 @@ import NewsList from "../components/NewsList";
 import { useChat } from "../ai/ChatProvider";
 import { useNews } from "../hooks/useNews";
 import { useStockRatings } from "../hooks/useStockRatings";
+import { useQuoteLookup } from "../hooks/useQuoteLookup";
 
 export default function Research({ equities, holdings, watchlist, selected, setSelected }) {
   const [view, setView] = useState("quote"); // quote | financials | screener
@@ -16,8 +17,21 @@ export default function Research({ equities, holdings, watchlist, selected, setS
 
   const { analyzeStock, streaming } = useChat();
   const { ratingFor, reload: reloadRatings } = useStockRatings();
+  const { quotes: lookedUp, lookup } = useQuoteLookup();
 
-  const quotesByTicker = useMemo(() => new Map(equities.map((e) => [e.ticker, e])), [equities]);
+  const cachedQuotes = useMemo(() => new Map(equities.map((e) => [e.ticker, e])), [equities]);
+
+  // Merge cached quotes with on-demand lookups so any opened ticker shows a
+  // name + day-change %, not just the ones already tracked in the cache.
+  const quotesByTicker = useMemo(() => {
+    const m = new Map(cachedQuotes);
+    for (const [sym, lu] of Object.entries(lookedUp)) {
+      if (lu?.found && !m.has(sym)) {
+        m.set(sym, { ticker: sym, name: lu.name, sector: lu.sector, price: lu.price, prev: lu.prev_close, mcap: lu.mcap });
+      }
+    }
+    return m;
+  }, [cachedQuotes, lookedUp]);
 
   const universe = useMemo(() => {
     const set = new Set([
@@ -34,6 +48,11 @@ export default function Research({ equities, holdings, watchlist, selected, setS
   const held = holdings.find((h) => h.ticker === symbol);
   const rating = ratingFor(symbol);
 
+  // Fetch a quote for the open symbol when it isn't in the cache.
+  useEffect(() => {
+    if (symbol && !cachedQuotes.has(symbol)) lookup(symbol);
+  }, [symbol, cachedQuotes, lookup]);
+
   // Per-symbol company news (Finnhub-cached); fall back to general market news.
   const { news: symbolNews } = useNews({ category: "company", symbols: [symbol], limit: 30 });
   const { news: generalNews } = useNews({ category: "general", limit: 30 });
@@ -46,6 +65,14 @@ export default function Research({ equities, holdings, watchlist, selected, setS
   const upperQuery = query.trim().toUpperCase();
   const filtered = query ? universe.filter((s) => s.includes(upperQuery)) : universe;
   const noExactMatch = upperQuery && !universe.includes(upperQuery);
+  const queryName = lookedUp[upperQuery]?.found ? lookedUp[upperQuery].name : null;
+
+  // Look up the typed ticker (debounced) so the "View …" row can show its name.
+  useEffect(() => {
+    if (!noExactMatch) return;
+    const t = setTimeout(() => lookup(upperQuery), 350);
+    return () => clearTimeout(t);
+  }, [upperQuery, noExactMatch, lookup]);
 
   function pick(sym) {
     const t = (sym ?? "").trim().toUpperCase();
@@ -91,10 +118,13 @@ export default function Research({ equities, holdings, watchlist, selected, setS
           {noExactMatch && (
             <div
               onClick={() => pick(upperQuery)}
-              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 14px", cursor: "pointer", fontFamily: MONO, fontSize: 12, color: COLORS.amber, borderBottom: `1px solid ${COLORS.border}`, background: "rgba(245,165,36,0.05)" }}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "9px 14px", cursor: "pointer", borderBottom: `1px solid ${COLORS.border}`, background: "rgba(245,165,36,0.05)" }}
             >
-              <span>View {upperQuery}</span>
-              <span style={{ color: COLORS.textMute }}>→</span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontFamily: MONO, fontSize: 12, color: COLORS.amber }}>View {upperQuery}</div>
+                {queryName && <div style={{ fontFamily: SANS, fontSize: 10.5, color: COLORS.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{queryName}</div>}
+              </div>
+              <span style={{ color: COLORS.textMute, fontFamily: MONO, fontSize: 12, flexShrink: 0 }}>→</span>
             </div>
           )}
           {filtered.map((s) => {

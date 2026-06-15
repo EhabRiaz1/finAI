@@ -1,6 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { streamChat } from "./streamClient";
+import { applyEdits, artifactOverview } from "../lib/grid";
+import { attachmentToBlocks } from "../lib/attachments";
+import { loadArtifact, commitArtifact } from "../lib/artifactsApi";
 
 /* ------------------------------------------------------------------
    ChatProvider — single source of truth for the AI assistant.
@@ -106,6 +109,12 @@ export function ChatProvider({ children, onDataChanged }) {
   const [conversationId, setConversationId] = useState(null);
   const [conversations, setConversations] = useState([]);
   const [flashIds, setFlashIds] = useState(new Set());
+
+  // Active spreadsheet artifact + the AI's staged (un-applied) cell edits.
+  const [activeArtifact, setActiveArtifact] = useState(null); // { id, name, data }
+  const [stagedEdits, setStagedEdits] = useState(() => new Map()); // "sheet:r:c" -> { sheet,row,col,old,value }
+  const activeArtifactRef = useRef(null);
+  activeArtifactRef.current = activeArtifact;
 
   /* ------------------------- persistence ------------------------- */
 
@@ -219,6 +228,58 @@ export function ChatProvider({ children, onDataChanged }) {
     setDisplayItems((prev) => [...prev, { id: uid(), ...item }]);
   }, []);
 
+  /* ------------------------ artifacts ------------------------ */
+
+  const openArtifact = useCallback(async (id) => {
+    try {
+      const row = await loadArtifact(id);
+      setActiveArtifact({ id: row.id, name: row.name, data: row.data });
+      setPanelOpen(true);
+    } catch {
+      /* artifact missing or not ours — ignore */
+    }
+  }, []);
+
+  const closeArtifact = useCallback(() => {
+    setActiveArtifact(null);
+    setStagedEdits(new Map());
+  }, []);
+
+  const setActiveSheet = useCallback((idx) => {
+    setActiveArtifact((prev) => (prev ? { ...prev, data: { ...prev.data, activeSheet: idx } } : prev));
+  }, []);
+
+  // Direct (manual) cell edit — commits immediately, no staging.
+  const updateArtifactCell = useCallback((sheetIdx, row, col, value) => {
+    setActiveArtifact((prev) => {
+      if (!prev) return prev;
+      const data = applyEdits(prev.data, sheetIdx, [{ row, col, value }]);
+      commitArtifact(prev.id, data).catch(() => {});
+      return { ...prev, data };
+    });
+  }, []);
+
+  const discardStagedEdits = useCallback(() => setStagedEdits(new Map()), []);
+
+  const applyStagedEdits = useCallback(() => {
+    setStagedEdits((staged) => {
+      if (!staged.size) return staged;
+      setActiveArtifact((prev) => {
+        if (!prev) return prev;
+        const bySheet = new Map();
+        for (const e of staged.values()) {
+          if (!bySheet.has(e.sheet)) bySheet.set(e.sheet, []);
+          bySheet.get(e.sheet).push({ row: e.row, col: e.col, value: e.value });
+        }
+        let data = prev.data;
+        for (const [sheetIdx, edits] of bySheet) data = applyEdits(data, sheetIdx, edits);
+        commitArtifact(prev.id, data).catch(() => {});
+        return { ...prev, data };
+      });
+      return new Map();
+    });
+  }, []);
+
   const runStream = useCallback(
     async (body, convId) => {
       setStreaming(true);
@@ -297,6 +358,21 @@ export function ChatProvider({ children, onDataChanged }) {
               }
               break;
             }
+            case "artifact_edit": {
+              // The agent proposed cell edits — stage them as a live preview.
+              if (!activeArtifactRef.current || activeArtifactRef.current.id !== ev.artifact_id) {
+                openArtifact(ev.artifact_id);
+              }
+              setPanelOpen(true);
+              setStagedEdits((prev) => {
+                const next = new Map(prev);
+                for (const e of ev.edits ?? []) {
+                  next.set(`${ev.sheet}:${e.row}:${e.col}`, { sheet: ev.sheet, row: e.row, col: e.col, old: e.old, value: e.value });
+                }
+                return next;
+              });
+              break;
+            }
             case "error":
               pushItem({ kind: "notice", text: `⚠︎ ${ev.message}` });
               break;
@@ -316,17 +392,31 @@ export function ChatProvider({ children, onDataChanged }) {
         abortRef.current = null;
       }
     },
-    [pushItem, saveMessage],
+    [pushItem, saveMessage, openArtifact],
   );
 
   const sendMessage = useCallback(
-    async (text) => {
-      const trimmed = text.trim();
-      if (!trimmed || streaming) return;
-      const convId = await ensureConversation(trimmed);
-      apiMessagesRef.current.push({ role: "user", content: trimmed });
-      pushItem({ kind: "user", text: trimmed });
-      saveMessage(convId ?? conversationId, "user", trimmed);
+    async (text, attachments = []) => {
+      const trimmed = (text ?? "").trim();
+      if ((!trimmed && !attachments.length) || streaming) return;
+      const firstText = trimmed || (attachments[0]?.name ? `Attached ${attachments[0].name}` : "Attachment");
+      const convId = await ensureConversation(firstText);
+
+      // Build content blocks: text + attachments + an active-artifact note.
+      const blocks = [];
+      if (trimmed) blocks.push({ type: "text", text: trimmed });
+      for (const att of attachments) blocks.push(...attachmentToBlocks(att));
+      const art = activeArtifactRef.current;
+      if (art && !attachments.some((a) => a.kind === "artifact")) {
+        const ov = artifactOverview(art.data).map((s) => `sheet "${s.name}" (${s.rows}×${s.cols})`).join("; ");
+        blocks.push({ type: "text", text: `[Active spreadsheet artifact — id=${art.id}, name="${art.name}": ${ov}. Use read_artifact / set_cells with this artifact_id.]` });
+      }
+      // Keep plain chats as a string (matches prior caching behavior).
+      const content = blocks.length === 1 && blocks[0].type === "text" ? blocks[0].text : blocks;
+
+      apiMessagesRef.current.push({ role: "user", content });
+      pushItem({ kind: "user", text: trimmed, attachments: attachments.map((a) => ({ name: a.name, kind: a.kind })) });
+      saveMessage(convId ?? conversationId, "user", content);
       await runStream({ messages: apiMessagesRef.current }, convId ?? conversationId);
     },
     [streaming, ensureConversation, conversationId, pushItem, saveMessage, runStream],
@@ -431,6 +521,15 @@ export function ChatProvider({ children, onDataChanged }) {
     refreshConversations,
     renameConversation,
     deleteConversation,
+    // artifacts
+    activeArtifact,
+    stagedEdits,
+    openArtifact,
+    closeArtifact,
+    setActiveSheet,
+    updateArtifactCell,
+    applyStagedEdits,
+    discardStagedEdits,
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

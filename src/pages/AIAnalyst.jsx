@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Bot, History, SquarePen } from "lucide-react";
 import { COLORS, MONO, SERIF } from "../lib/theme";
 import { useChat } from "../ai/ChatProvider";
 import ChatThread from "../ai/ChatThread";
 import ChatHistory from "../ai/ChatHistory";
+import ArtifactPanel from "../ai/ArtifactPanel";
 
 /* ------------------------------------------------------------------
    AI ANALYST — full-page chat. Shares conversation state with the
@@ -20,8 +21,25 @@ const SUGGESTIONS = [
 ];
 
 export default function AIAnalyst() {
-  const { newChat, streaming } = useChat();
+  const { newChat, streaming, activeArtifact } = useChat();
   const [showHistory, setShowHistory] = useState(false);
+  const [artifactWidth, setArtifactWidth] = useState(560);
+  const bodyRef = useRef(null);
+  const dragRef = useRef(false);
+
+  // Draggable splitter between chat and the artifact panel.
+  const onSplitMove = useCallback((e) => {
+    if (!dragRef.current || !bodyRef.current) return;
+    const rect = bodyRef.current.getBoundingClientRect();
+    const w = rect.right - e.clientX;
+    setArtifactWidth(Math.max(360, Math.min(w, rect.width - 380)));
+  }, []);
+  useEffect(() => {
+    const up = () => { dragRef.current = false; document.body.style.cursor = ""; document.body.style.userSelect = ""; };
+    window.addEventListener("mousemove", onSplitMove);
+    window.addEventListener("mouseup", up);
+    return () => { window.removeEventListener("mousemove", onSplitMove); window.removeEventListener("mouseup", up); };
+  }, [onSplitMove]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -54,7 +72,7 @@ export default function AIAnalyst() {
         </div>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+      <div ref={bodyRef} style={{ flex: 1, minHeight: 0, display: "flex" }}>
         {showHistory && (
           <div style={{ width: 280, flexShrink: 0, borderRight: `1px solid ${COLORS.border}`, minHeight: 0 }}>
             <ChatHistory onSelect={() => setShowHistory(false)} />
@@ -63,6 +81,20 @@ export default function AIAnalyst() {
         <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
           <ChatThread suggestions={SUGGESTIONS} />
         </div>
+        {activeArtifact && (
+          <>
+            <div
+              onMouseDown={() => { dragRef.current = true; document.body.style.cursor = "col-resize"; document.body.style.userSelect = "none"; }}
+              style={{ width: 5, flexShrink: 0, cursor: "col-resize", background: COLORS.border }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = COLORS.amberDim)}
+              onMouseLeave={(e) => (e.currentTarget.style.background = COLORS.border)}
+              title="Drag to resize"
+            />
+            <div style={{ width: artifactWidth, flexShrink: 0, minHeight: 0 }}>
+              <ArtifactPanel />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

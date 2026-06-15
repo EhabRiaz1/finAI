@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Bot, History, Maximize2, SquarePen, X } from "lucide-react";
+import { Bot, FileSpreadsheet, History, Maximize2, SquarePen, X } from "lucide-react";
 import { COLORS, MONO, SERIF } from "../lib/theme";
 import { useChat } from "./ChatProvider";
 import ChatThread from "./ChatThread";
@@ -12,7 +12,7 @@ import ChatHistory from "./ChatHistory";
    ------------------------------------------------------------------ */
 
 export default function ChatPanel({ onOpenFullPage }) {
-  const { panelOpen, setPanelOpen, newChat } = useChat();
+  const { panelOpen, setPanelOpen, newChat, activeArtifact, stagedEdits } = useChat();
   const [showHistory, setShowHistory] = useState(false);
 
   return (
@@ -74,6 +74,20 @@ export default function ChatPanel({ onOpenFullPage }) {
           </IconButton>
         </div>
       </div>
+
+      {activeArtifact && (
+        <button
+          onClick={() => { setPanelOpen(false); onOpenFullPage?.(); }}
+          style={{ all: "unset", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, padding: "9px 16px", borderBottom: `1px solid ${COLORS.border}`, background: "rgba(245,165,36,0.06)", flexShrink: 0 }}
+          title="Open the spreadsheet full-page"
+        >
+          <FileSpreadsheet size={13} color={COLORS.amber} />
+          <span style={{ fontFamily: MONO, fontSize: 10, color: COLORS.amber, letterSpacing: 0.5, flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {activeArtifact.name}{stagedEdits.size ? ` · ${stagedEdits.size} staged` : ""}
+          </span>
+          <span style={{ fontFamily: MONO, fontSize: 9, color: COLORS.textDim, letterSpacing: 1 }}>OPEN →</span>
+        </button>
+      )}
 
       <div style={{ flex: 1, minHeight: 0 }}>
         {showHistory ? (
