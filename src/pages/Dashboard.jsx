@@ -4,8 +4,10 @@ import { COLORS, fmtMoney, fmtMoney0, fmtPct, MONO, SANS, SERIF } from "../lib/t
 import { Panel, PanelHeader, StatTile } from "../components/ui";
 import PerformanceChart from "../components/PerformanceChart";
 import NewsList from "../components/NewsList";
+import ModifiedDietzCard from "../components/ModifiedDietzCard";
 import { usePerformance } from "../hooks/usePerformance";
 import { useNews } from "../hooks/useNews";
+import { usePortfolioReturn } from "../hooks/usePortfolioReturn";
 import { marketValue as bondMarketValue } from "../lib/bonds";
 
 export default function Dashboard({ equities, indices, holdings, bonds = [], balances, watchlist, name, setActive, setSelected }) {
@@ -31,6 +33,8 @@ export default function Dashboard({ equities, indices, holdings, bonds = [], bal
   const totalPnL = totalMV - totalCB;
   const cash = Number(balances?.cash ?? 0);
   const topPositions = rows.slice(0, 6);
+
+  const dietz = usePortfolioReturn();
 
   const bondsMV = useMemo(
     () => bonds.reduce((s, b) => s + bondMarketValue(b), 0),
@@ -81,6 +85,17 @@ export default function Dashboard({ equities, indices, holdings, bonds = [], bal
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Modified Dietz return (beta) */}
+      <div style={{ display: "grid", gridTemplateColumns: "1.15fr 1fr", gap: 12, marginBottom: 14 }}>
+        <ModifiedDietzCard data={dietz} />
+        <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, padding: "16px 18px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          <div style={{ fontFamily: MONO, fontSize: 9, color: COLORS.textMute, letterSpacing: 1.5, marginBottom: 8 }}>WHAT THIS IS</div>
+          <div style={{ fontFamily: SANS, fontSize: 12, color: COLORS.textDim, lineHeight: 1.55 }}>
+            A money-weighted YTD return: it strips out your deposits and withdrawals and weights each cash flow by how long it was invested — so it measures performance, not contributions. <span style={{ color: COLORS.textMute }}>Beta: computed at the account level from its own ledger.</span>
+          </div>
+        </div>
       </div>
 
       {/* Market overview */}
