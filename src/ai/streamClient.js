@@ -13,7 +13,11 @@ export async function* streamChat(body, { signal } = {}) {
   } = await supabase.auth.getSession();
   if (!session) throw new Error("Not signed in.");
 
-  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-analyst`, {
+  // Claude ids + "auto" go to ai-analyst (full edit); other providers are read-only.
+  const m = body?.model || "";
+  const fn = /^(openai|deepseek|gemini):/.test(m) ? "ai-analyst-openai" : "ai-analyst";
+
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${fn}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${session.access_token}`,

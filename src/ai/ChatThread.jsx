@@ -6,6 +6,7 @@ import { ACCEPT } from "../lib/attachments";
 import MarkdownMessage from "./MarkdownMessage";
 import ConfirmationCard from "./ConfirmationCard";
 import ThinkingIndicator from "./ThinkingIndicator";
+import ModelPicker from "./ModelPicker";
 
 /* ------------------------------------------------------------------
    Shared chat transcript + composer, used by both the full AI Analyst
@@ -79,6 +80,7 @@ export default function ChatThread({ suggestions = DEFAULT_SUGGESTIONS, compact 
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState([]); // { id, name, kind, status, error, descriptor }
   const [dragging, setDragging] = useState(false);
+  const [focused, setFocused] = useState(false);
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
   const fileRef = useRef(null);
@@ -210,7 +212,7 @@ export default function ChatThread({ suggestions = DEFAULT_SUGGESTIONS, compact 
 
       {showSuggestions && (
         <div style={{ padding: compact ? "0 16px 10px" : "0 24px 12px" }}>
-          <div style={{ maxWidth, margin: "0 auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ maxWidth, margin: "0 auto", display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
             {suggestions.map((s) => (
               <button
                 key={s}
@@ -243,17 +245,10 @@ export default function ChatThread({ suggestions = DEFAULT_SUGGESTIONS, compact 
             </div>
           )}
 
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+          {/* Unified composer card: textarea on top, toolbar (attach + model
+              selector, then send) along the bottom inside the same border. */}
+          <div style={{ border: `1px solid ${focused ? COLORS.amberDim : COLORS.border}`, background: COLORS.panel, transition: "border-color 0.15s" }}>
             <input ref={fileRef} type="file" multiple accept={ACCEPT} style={{ display: "none" }} onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }} />
-            <button
-              onClick={() => fileRef.current?.click()}
-              title="Attach files"
-              style={{ all: "unset", cursor: "pointer", padding: "11px 12px", border: `1px solid ${COLORS.border}`, color: COLORS.textDim, display: "flex", alignItems: "center" }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = COLORS.amber; e.currentTarget.style.borderColor = COLORS.amberDim; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = COLORS.textDim; e.currentTarget.style.borderColor = COLORS.border; }}
-            >
-              <Paperclip size={15} />
-            </button>
 
             <textarea
               ref={textareaRef}
@@ -261,25 +256,40 @@ export default function ChatThread({ suggestions = DEFAULT_SUGGESTIONS, compact 
               rows={1}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
               placeholder="Ask, instruct, attach a spreadsheet to edit…"
-              style={{ flex: 1, minWidth: 0, background: COLORS.panel, border: `1px solid ${COLORS.border}`, padding: "11px 13px", color: COLORS.text, fontFamily: SANS, fontSize: 13, outline: "none", resize: "none", maxHeight: 160, overflowY: "auto", lineHeight: 1.5, display: "block" }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = COLORS.amberDim)}
-              onBlur={(e) => (e.currentTarget.style.borderColor = COLORS.border)}
+              style={{ width: "100%", boxSizing: "border-box", background: "transparent", border: "none", outline: "none", resize: "none", color: COLORS.text, fontFamily: SANS, fontSize: 13, lineHeight: 1.5, padding: "12px 14px 8px", maxHeight: 160, overflowY: "auto", display: "block" }}
             />
 
-            {streaming ? (
-              <button onClick={abort} title="Stop" style={{ all: "unset", cursor: "pointer", padding: "11px 14px", border: `1px solid ${COLORS.borderHi}`, color: COLORS.text, display: "flex", alignItems: "center", gap: 7, fontFamily: MONO, fontSize: 10.5, letterSpacing: 1 }}>
-                <Square size={10} fill={COLORS.text} /> STOP
-              </button>
-            ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 8px", borderTop: `1px solid ${COLORS.border}` }}>
               <button
-                onClick={() => submit()}
-                disabled={!canSend}
-                style={{ all: "unset", cursor: canSend ? "pointer" : "not-allowed", padding: "11px 16px", background: canSend ? COLORS.amber : "transparent", color: canSend ? COLORS.bg : COLORS.textMute, border: `1px solid ${canSend ? COLORS.amber : COLORS.border}`, fontFamily: MONO, fontSize: 10.5, letterSpacing: 1.2, display: "flex", alignItems: "center", gap: 7 }}
+                onClick={() => fileRef.current?.click()}
+                title="Attach files"
+                style={{ all: "unset", cursor: "pointer", padding: "7px 8px", color: COLORS.textDim, display: "flex", alignItems: "center" }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.amber)}
+                onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.textDim)}
               >
-                SEND <Send size={11} />
+                <Paperclip size={16} />
               </button>
-            )}
+
+              <ModelPicker compact />
+
+              {streaming ? (
+                <button onClick={abort} title="Stop" style={{ all: "unset", marginLeft: "auto", cursor: "pointer", padding: "8px 10px", border: `1px solid ${COLORS.borderHi}`, color: COLORS.text, display: "flex", alignItems: "center", gap: 6, fontFamily: MONO, fontSize: 10, letterSpacing: 1 }}>
+                  <Square size={10} fill={COLORS.text} /> STOP
+                </button>
+              ) : (
+                <button
+                  onClick={() => submit()}
+                  disabled={!canSend}
+                  title="Send"
+                  style={{ all: "unset", marginLeft: "auto", cursor: canSend ? "pointer" : "not-allowed", padding: "8px 11px", background: canSend ? COLORS.amber : "transparent", color: canSend ? COLORS.bg : COLORS.textMute, border: `1px solid ${canSend ? COLORS.amber : COLORS.border}`, display: "flex", alignItems: "center" }}
+                >
+                  <Send size={15} />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

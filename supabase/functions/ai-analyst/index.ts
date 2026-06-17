@@ -20,7 +20,17 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const MODEL = "claude-opus-4-8";
+const DEFAULT_MODEL = "claude-opus-4-8";
+// Models this (Claude) function serves. Non-Claude picks are routed by the
+// frontend to the ai-analyst-openai function instead.
+const CLAUDE_MODELS = new Set(["claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-8", "claude-fable-5"]);
+// Auto mode: cheapest capable Claude tier per difficulty.
+const TIER_TO_MODEL: Record<string, string> = {
+  easy: "claude-haiku-4-5",
+  moderate: "claude-sonnet-4-6",
+  hard: "claude-opus-4-8",
+  expert: "claude-fable-5",
+};
 const MAX_TOKENS = 16000;
 const MAX_ITERATIONS = 15;
 const SOFT_DEADLINE_MS = 100_000; // Supabase edge wall clock is ~150s
@@ -101,6 +111,46 @@ function sanitizeForApi(messages: Json[]): Json[] {
   return merged;
 }
 
+/** Last user message rendered to plain text (for the auto-mode classifier). */
+function lastUserText(messages: Json[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m?.role !== "user") continue;
+    if (typeof m.content === "string") return m.content;
+    if (Array.isArray(m.content)) {
+      const txt = m.content.filter((b: Json) => b?.type === "text").map((b: Json) => b.text).join(" ").trim();
+      if (txt) return txt;
+    }
+  }
+  return "";
+}
+
+/** Auto mode: a cheap Haiku call rates query difficulty, mapped to the cheapest
+ *  capable Claude tier. Falls back to the default model on any error. Silent —
+ *  the chosen model is not surfaced to the client. */
+async function routeAuto(anthropic: Json, messages: Json[]): Promise<string> {
+  const text = lastUserText(messages).slice(0, 2000);
+  if (!text) return DEFAULT_MODEL;
+  try {
+    const r = await anthropic.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 8,
+      system:
+        "You route a finance question to a model tier. Reply with ONE word only: " +
+        "easy, moderate, hard, or expert. " +
+        "easy = greetings, simple lookups or definitions. " +
+        "moderate = explanations or single-step analysis. " +
+        "hard = multi-step valuation, comparisons, or portfolio reasoning. " +
+        "expert = complex multi-constraint modeling or long-horizon analysis.",
+      messages: [{ role: "user", content: text }],
+    });
+    const word = (r.content?.[0]?.text ?? "").toLowerCase().replace(/[^a-z]/g, "");
+    return TIER_TO_MODEL[word] ?? DEFAULT_MODEL;
+  } catch {
+    return DEFAULT_MODEL;
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 
@@ -128,6 +178,12 @@ Deno.serve(async (req: Request) => {
   );
 
   const anthropic = new Anthropic({ apiKey });
+  // Resolve the model: explicit Claude pick, or auto-route via a cheap classifier.
+  // (Unknown / non-Claude ids fall back to the default — those are served elsewhere.)
+  const requested = typeof body?.model === "string" ? body.model : DEFAULT_MODEL;
+  const activeModel = requested === "auto"
+    ? await routeAuto(anthropic, messages)
+    : (CLAUDE_MODELS.has(requested) ? requested : DEFAULT_MODEL);
   const system = [{ type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } }];
   const tools = [...TOOLS, { type: "web_search_20260209", name: "web_search" }];
   const started = Date.now();
@@ -234,7 +290,7 @@ Deno.serve(async (req: Request) => {
           send({ type: "message_start" });
 
           const apiStream = anthropic.messages.stream({
-            model: MODEL,
+            model: activeModel,
             max_tokens: MAX_TOKENS,
             thinking: { type: "adaptive", display: "summarized" },
             system,

@@ -2,12 +2,11 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 /* ------------------------------------------------------------------
-   PORTFOLIO RETURN — household + per-account Modified Dietz (YTD).
-   The dashboard runs per-account under RLS and can't see sibling
-   accounts, so this service-role function aggregates the caller's
-   HOUSEHOLD (account_households) to produce the real whole-portfolio
-   return. Inter-account transfers (cash_transactions.type='transfer')
-   are internal and excluded from household external flows.
+   PORTFOLIO RETURN — single-account Modified Dietz (YTD).
+   Computes the caller's OWN account return only (the logged-in
+   user_id). Inter-account transfers (cash_transactions.type='transfer')
+   are treated as external cash flows, so moving money in or out does
+   not inflate or deflate the measured return.
    ------------------------------------------------------------------ */
 
 const CORS = {
@@ -43,19 +42,28 @@ async function computeReturn(sb: Json, userIds: string[], inclTransfer: boolean)
   const start = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
   const startMs = start.getTime();
 
-  const [hold, tx, cashTx, divs, bals] = await Promise.all([
+  const [hold, tx, cashTx, divs, bals, bondRes] = await Promise.all([
     sb.from("equity_holdings").select("ticker, shares, cost_per_share").in("user_id", userIds),
     sb.from("transactions").select("symbol, side, quantity, price, commission, fees, trade_time").in("user_id", userIds),
     sb.from("cash_transactions").select("txn_date, type, amount").in("user_id", userIds),
     sb.from("dividends").select("pay_date, net").in("user_id", userIds),
     sb.from("account_balances").select("cash").in("user_id", userIds),
+    sb.from("bond_holdings").select("face_value, quantity, purchase_price, start_price, current_price").in("user_id", userIds),
   ]);
+
+  // Bonds are held across the whole window (no flows): they add to both BMV and EMV.
+  let bmvBonds = 0, emvBonds = 0;
+  for (const b of bondRes.data ?? []) {
+    const nominal = Number(b.face_value ?? 0) * Number(b.quantity ?? 0);
+    bmvBonds += (nominal * Number(b.start_price ?? b.purchase_price ?? 100)) / 100;
+    emvBonds += (nominal * Number(b.current_price ?? b.purchase_price ?? 100)) / 100;
+  }
 
   const holdings = hold.data ?? [];
   const transactions = tx.data ?? [];
   const cashNow = (bals.data ?? []).reduce((s: number, b: Json) => s + Number(b.cash ?? 0), 0);
 
-  // Aggregate current shares per ticker (a household may hold a ticker in >1 sleeve).
+  // Aggregate current shares per ticker (the account may hold a ticker in >1 row).
   const sharesNow = new Map<string, number>();
   const costNow = new Map<string, number>();
   for (const h of holdings) {
@@ -110,11 +118,11 @@ async function computeReturn(sb: Json, userIds: string[], inclTransfer: boolean)
     if (px != null) bmvEquity += sh * px;
   }
   const cashStart = cashNow - netCashAfter;
-  const bmv = bmvEquity + cashStart;
+  const bmv = bmvEquity + bmvBonds + cashStart;
 
   let emvEquity = 0;
   for (const [ticker, sh] of sharesNow) emvEquity += sh * (quotes.get(ticker) ?? costNow.get(ticker) ?? 0);
-  const emv = emvEquity + cashNow;
+  const emv = emvEquity + emvBonds + cashNow;
 
   const flows = (cashTx.data ?? [])
     .filter((c: Json) => (inclTransfer || c.type !== "transfer") && new Date(c.txn_date).getTime() > startMs)
@@ -138,21 +146,10 @@ Deno.serve(async (req: Request) => {
 
   const admin = createClient(url, service, { auth: { autoRefreshToken: false, persistSession: false } });
 
-  // The caller's household = every account sharing their household_id (derived
-  // from their own membership row — they can't request someone else's).
-  const mine = await admin.from("account_households").select("household_id").eq("user_id", user.id).maybeSingle();
-  let members = [user.id];
-  if (mine.data?.household_id) {
-    const m = await admin.from("account_households").select("user_id").eq("household_id", mine.data.household_id);
-    if (m.data?.length) members = m.data.map((r: Json) => r.user_id);
-  }
-
   try {
-    const [household, account] = await Promise.all([
-      computeReturn(admin, members, false),   // household: transfers are internal
-      computeReturn(admin, [user.id], true),  // this account: transfers are external
-    ]);
-    return json({ household, account, members: members.length });
+    // Single account: the caller's own user_id, transfers treated as external.
+    const result = await computeReturn(admin, [user.id], true);
+    return json(result);
   } catch (e) {
     return json({ error: String((e as Error)?.message ?? e) }, 500);
   }

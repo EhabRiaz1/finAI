@@ -27,7 +27,7 @@ function sliceForRange(series, range) {
 }
 
 export default function PerformanceChart({ series, height = 280 }) {
-  const [range, setRange] = useState("1Y");
+  const [range, setRange] = useState("YTD");
 
   const data = useMemo(() => {
     if (!series?.length) return [];

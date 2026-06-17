@@ -12,7 +12,7 @@ import { marketValue as bondMarketValue } from "../lib/bonds";
 
 export default function Dashboard({ equities, indices, holdings, bonds = [], balances, watchlist, name, setActive, setSelected }) {
   const quotesByTicker = useMemo(() => new Map(equities.map((e) => [e.ticker, e])), [equities]);
-  const { series } = usePerformance(holdings);
+  const { series } = usePerformance();
   const { news } = useNews({ category: "general", limit: 7 });
 
   const rows = useMemo(() => {
@@ -93,7 +93,7 @@ export default function Dashboard({ equities, indices, holdings, bonds = [], bal
         <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, padding: "16px 18px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
           <div style={{ fontFamily: MONO, fontSize: 9, color: COLORS.textMute, letterSpacing: 1.5, marginBottom: 8 }}>WHAT THIS IS</div>
           <div style={{ fontFamily: SANS, fontSize: 12, color: COLORS.textDim, lineHeight: 1.55 }}>
-            A money-weighted YTD return: it strips out your deposits and withdrawals and weights each cash flow by how long it was invested — so it measures performance, not contributions. <span style={{ color: COLORS.textMute }}>Beta: computed at the account level from its own ledger.</span>
+            A money-weighted YTD return: it strips out your deposits and withdrawals and weights each cash flow by how long it was invested — so it measures performance, not contributions. <span style={{ color: COLORS.textMute }}>Computed at the account level from its own ledger.</span>
           </div>
         </div>
       </div>
@@ -110,7 +110,7 @@ export default function Dashboard({ equities, indices, holdings, bonds = [], bal
       {/* Performance + portfolio snapshot */}
       <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 14, marginBottom: 14 }}>
         <Panel>
-          <PanelHeader title="My Performance" right="VS S&P 500 · NASDAQ" />
+          <PanelHeader title="My Performance" right="YTD · TIME-WEIGHTED · VS S&P 500 · NASDAQ" />
           <PerformanceChart series={series} />
         </Panel>
         <Panel>

@@ -36,14 +36,18 @@ export default function Balances({ equities, holdings, balances, onUpdateBuyingP
     return Object.entries(map).sort((a, b) => b[1] - a[1]);
   }, [rows]);
 
+  const todayStr = new Date().toISOString().slice(0, 10);
   const income = useMemo(() => {
-    const divNet = dividends.reduce((s, d) => s + Number(d.net), 0);
-    const divGross = dividends.reduce((s, d) => s + Number(d.gross), 0);
-    const wht = dividends.reduce((s, d) => s + Number(d.withholding_tax), 0);
+    const received = dividends.filter((d) => d.pay_date <= todayStr);
+    const upcoming = dividends.filter((d) => d.pay_date > todayStr);
+    const divNet = received.reduce((s, d) => s + Number(d.net), 0);
+    const divGross = received.reduce((s, d) => s + Number(d.gross), 0);
+    const wht = received.reduce((s, d) => s + Number(d.withholding_tax), 0);
+    const divUpcoming = upcoming.reduce((s, d) => s + Number(d.net), 0);
     const deposits = cashFlows.filter((c) => c.type === "deposit").reduce((s, c) => s + Number(c.amount), 0);
     const withdrawals = cashFlows.filter((c) => c.type === "withdrawal").reduce((s, c) => s + Number(c.amount), 0);
-    return { divNet, divGross, wht, deposits, withdrawals };
-  }, [dividends, cashFlows]);
+    return { divNet, divGross, wht, divUpcoming, receivedCount: received.length, upcomingCount: upcoming.length, deposits, withdrawals };
+  }, [dividends, cashFlows, todayStr]);
 
   async function saveBuyingPower() {
     setSaving(true);
@@ -120,28 +124,34 @@ export default function Balances({ equities, holdings, balances, onUpdateBuyingP
 
       {/* Income & cash flow */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginTop: 20, marginBottom: 14 }}>
-        <SmallStat label="Dividends (Net YTD)" value={`+$${fmtMoney(income.divNet)}`} tone={COLORS.up} />
-        <SmallStat label="Dividends (Gross)" value={`$${fmtMoney(income.divGross)}`} />
+        <SmallStat label="Dividends Received (Net)" value={`+$${fmtMoney(income.divNet)}`} tone={COLORS.up} />
+        <SmallStat label="Upcoming Dividends (Net)" value={`$${fmtMoney(income.divUpcoming)}`} tone={COLORS.amber} />
         <SmallStat label="Withholding Tax" value={`-$${fmtMoney(income.wht)}`} tone={COLORS.down} />
         <SmallStat label="Net Deposits YTD" value={`$${fmtMoney0(income.deposits + income.withdrawals)}`} />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <Panel>
-          <PanelHeader title="Dividend Income" right={`${dividends.length} PAYMENTS`} />
+          <PanelHeader title="Dividend Income" right={`${income.receivedCount} RECEIVED · ${income.upcomingCount} UPCOMING`} />
           <div style={{ display: "grid", gridTemplateColumns: "0.9fr 0.8fr 0.7fr 0.9fr 0.9fr", padding: "10px 16px", fontFamily: MONO, fontSize: 9, color: COLORS.textMute, letterSpacing: 1.2, borderBottom: `1px solid ${COLORS.border}` }}>
             <div>DATE</div><div>SYMBOL</div><div style={{ textAlign: "right" }}>RATE</div><div style={{ textAlign: "right" }}>GROSS</div><div style={{ textAlign: "right" }}>NET</div>
           </div>
           <div style={{ maxHeight: 340, overflowY: "auto" }}>
-            {dividends.map((d) => (
-              <div key={d.id} style={{ display: "grid", gridTemplateColumns: "0.9fr 0.8fr 0.7fr 0.9fr 0.9fr", padding: "9px 16px", fontFamily: MONO, fontSize: 12, borderBottom: `1px solid ${COLORS.border}` }}>
-                <div style={{ color: COLORS.textDim }}>{new Date(d.pay_date).toLocaleDateString("en-US", { month: "short", day: "2-digit" })}</div>
-                <div style={{ color: COLORS.amber }}>{d.symbol}</div>
-                <div style={{ textAlign: "right", color: COLORS.textDim }}>{Number(d.per_share).toFixed(2)}</div>
-                <div style={{ textAlign: "right" }}>{fmtMoney(d.gross)}</div>
-                <div style={{ textAlign: "right", color: COLORS.up }}>{fmtMoney(d.net)}</div>
-              </div>
-            ))}
+            {dividends.map((d) => {
+              const upcoming = d.pay_date > todayStr;
+              return (
+                <div key={d.id} style={{ display: "grid", gridTemplateColumns: "0.9fr 0.8fr 0.7fr 0.9fr 0.9fr", padding: "9px 16px", fontFamily: MONO, fontSize: 12, borderBottom: `1px solid ${COLORS.border}`, opacity: upcoming ? 0.6 : 1 }}>
+                  <div style={{ color: COLORS.textDim, display: "flex", alignItems: "center", gap: 6 }}>
+                    {new Date(d.pay_date).toLocaleDateString("en-US", { month: "short", day: "2-digit" })}
+                    {upcoming && <span style={{ fontSize: 8, letterSpacing: 0.5, color: COLORS.amber, border: `1px solid ${COLORS.amberDim}`, padding: "0 3px" }}>SOON</span>}
+                  </div>
+                  <div style={{ color: COLORS.amber }}>{d.symbol}</div>
+                  <div style={{ textAlign: "right", color: COLORS.textDim }}>{Number(d.per_share).toFixed(2)}</div>
+                  <div style={{ textAlign: "right" }}>{fmtMoney(d.gross)}</div>
+                  <div style={{ textAlign: "right", color: upcoming ? COLORS.amber : COLORS.up }}>{fmtMoney(d.net)}</div>
+                </div>
+              );
+            })}
             {!dividends.length && <div style={{ padding: 16, color: COLORS.textDim, fontSize: 13 }}>No dividends recorded.</div>}
           </div>
         </Panel>

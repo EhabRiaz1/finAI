@@ -47,9 +47,6 @@ export default function AIAnalyst() {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <Bot size={18} color={COLORS.amber} strokeWidth={1.5} />
           <div style={{ fontFamily: SERIF, fontSize: 22, color: COLORS.text }}>AI Analyst</div>
-          <div style={{ fontFamily: MONO, fontSize: 9, padding: "3px 8px", border: `1px solid ${COLORS.amberDim}`, color: COLORS.amber, letterSpacing: 1.5, marginLeft: 8 }}>
-            CLAUDE OPUS · FULL PORTFOLIO CONTROL
-          </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button

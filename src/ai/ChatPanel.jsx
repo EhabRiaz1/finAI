@@ -46,9 +46,6 @@ export default function ChatPanel({ onOpenFullPage }) {
       >
         <Bot size={15} color={COLORS.amber} strokeWidth={1.5} />
         <div style={{ fontFamily: SERIF, fontSize: 17, color: COLORS.text }}>Finance AI</div>
-        <div style={{ fontFamily: MONO, fontSize: 8.5, padding: "2px 6px", border: `1px solid ${COLORS.amberDim}`, color: COLORS.amber, letterSpacing: 1.2 }}>
-          ⌘J
-        </div>
         <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
           <IconButton
             title={showHistory ? "Back to chat" : "History"}

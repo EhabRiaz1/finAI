@@ -110,6 +110,17 @@ export function ChatProvider({ children, onDataChanged }) {
   const [conversations, setConversations] = useState([]);
   const [flashIds, setFlashIds] = useState(new Set());
 
+  // Selected model: "auto" | a Claude id | "provider:model" (OpenAI/DeepSeek/Gemini).
+  const [model, setModelState] = useState(() => {
+    try { return localStorage.getItem("ai_model") || "auto"; } catch { return "auto"; }
+  });
+  const modelRef = useRef(model);
+  modelRef.current = model;
+  const setModel = useCallback((m) => {
+    try { localStorage.setItem("ai_model", m); } catch { /* ignore */ }
+    setModelState(m);
+  }, []);
+
   // Active spreadsheet artifact + the AI's staged (un-applied) cell edits.
   const [activeArtifact, setActiveArtifact] = useState(null); // { id, name, data }
   const [stagedEdits, setStagedEdits] = useState(() => new Map()); // "sheet:r:c" -> { sheet,row,col,old,value }
@@ -301,7 +312,7 @@ export function ChatProvider({ children, onDataChanged }) {
       };
 
       try {
-        for await (const ev of streamChat(body, { signal: controller.signal })) {
+        for await (const ev of streamChat({ ...body, model: modelRef.current }, { signal: controller.signal })) {
           switch (ev.type) {
             case "message_start":
               currentTextId = null;
@@ -512,6 +523,8 @@ export function ChatProvider({ children, onDataChanged }) {
     conversationId,
     conversations,
     flashIds,
+    model,
+    setModel,
     sendMessage,
     analyzeStock,
     resolveConfirmation,

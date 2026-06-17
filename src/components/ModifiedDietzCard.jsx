@@ -2,10 +2,8 @@ import React from "react";
 import { COLORS, fmtMoney0, MONO, SANS, SERIF } from "../lib/theme";
 
 /* ------------------------------------------------------------------
-   Dashboard card: YTD return via the Modified Dietz method. Headline is
-   the HOUSEHOLD figure (all linked accounts combined) — the real
-   whole-portfolio return — with the single account's sleeve return
-   shown beneath. Marked BETA. See docs/modified-dietz.md.
+   Dashboard card: YTD return via the Modified Dietz method, for the
+   caller's own account only. Marked BETA. See docs/modified-dietz.md.
    ------------------------------------------------------------------ */
 
 function pct(x) {
@@ -13,13 +11,10 @@ function pct(x) {
 }
 
 export default function ModifiedDietzCard({ data }) {
-  const hh = data?.household;
-  const acct = data?.account;
-  const ready = hh?.ready;
-  const ret = hh?.ret ?? 0;
+  const ready = data?.ready;
+  const ret = data?.ret ?? 0;
   const up = ret >= 0;
   const tone = up ? COLORS.up : COLORS.down;
-  const members = data?.members ?? 1;
 
   return (
     <div style={{ position: "relative", overflow: "hidden", background: COLORS.panel, border: `1px solid ${COLORS.border}`, padding: "16px 18px" }}>
@@ -29,7 +24,6 @@ export default function ModifiedDietzCard({ data }) {
         <div style={{ fontFamily: MONO, fontSize: 9, color: COLORS.textMute, letterSpacing: 1.5, textTransform: "uppercase" }}>
           Modified Dietz Return
         </div>
-        <span style={{ fontFamily: MONO, fontSize: 8, letterSpacing: 1.5, color: COLORS.amber, border: `1px solid ${COLORS.amberDim}`, padding: "1px 5px" }}>BETA</span>
       </div>
 
       {data?.loading ? (
@@ -38,22 +32,14 @@ export default function ModifiedDietzCard({ data }) {
         <>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
             <div style={{ fontFamily: SERIF, fontSize: 32, color: tone, lineHeight: 1 }}>{pct(ret)}</div>
-            <div style={{ fontFamily: MONO, fontSize: 10, color: COLORS.textDim, letterSpacing: 0.5 }}>
-              YTD{members > 1 ? ` · household · ${members} accounts` : ""}
-            </div>
+            <div style={{ fontFamily: MONO, fontSize: 10, color: COLORS.textDim, letterSpacing: 0.5 }}>YTD</div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px", marginTop: 12 }}>
-            <Stat label="Start value" value={`$${fmtMoney0(hh.bmv)}`} />
-            <Stat label="Current value" value={`$${fmtMoney0(hh.emv)}`} />
-            <Stat label="Net flows" value={`${hh.netFlows >= 0 ? "+" : "-"}$${fmtMoney0(Math.abs(hh.netFlows))}`} />
-            <Stat label="Gain (ex-flows)" value={`${hh.gain >= 0 ? "+" : "-"}$${fmtMoney0(Math.abs(hh.gain))}`} tone={hh.gain >= 0 ? COLORS.up : COLORS.down} />
+            <Stat label="Start value" value={`$${fmtMoney0(data.bmv)}`} />
+            <Stat label="Current value" value={`$${fmtMoney0(data.emv)}`} />
+            <Stat label="Net flows" value={`${data.netFlows >= 0 ? "+" : "-"}$${fmtMoney0(Math.abs(data.netFlows))}`} />
+            <Stat label="Gain (ex-flows)" value={`${data.gain >= 0 ? "+" : "-"}$${fmtMoney0(Math.abs(data.gain))}`} tone={data.gain >= 0 ? COLORS.up : COLORS.down} />
           </div>
-          {members > 1 && acct?.ready && (
-            <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${COLORS.border}`, fontFamily: MONO, fontSize: 10.5, color: COLORS.textDim, display: "flex", justifyContent: "space-between" }}>
-              <span>This account (sleeve)</span>
-              <span style={{ color: acct.ret >= 0 ? COLORS.up : COLORS.down }}>{pct(acct.ret)}</span>
-            </div>
-          )}
         </>
       ) : (
         <div style={{ fontFamily: SANS, fontSize: 13, color: COLORS.textDim, marginTop: 8 }}>

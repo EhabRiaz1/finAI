@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 /**
- * Household + per-account Modified Dietz YTD return, from the service-role
- * `portfolio-return` edge function (aggregates the caller's linked accounts).
- * Returns { loading, household, account, members, error }.
+ * Single-account Modified Dietz YTD return, from the `portfolio-return` edge
+ * function (the caller's own account only).
+ * Returns { loading, ready, ret, bmv, emv, netFlows, gain, error }.
  */
 export function usePortfolioReturn() {
   const [state, setState] = useState({ loading: true });
@@ -16,7 +16,7 @@ export function usePortfolioReturn() {
         const { data, error } = await supabase.functions.invoke("portfolio-return", { body: {} });
         if (cancelled) return;
         if (error) setState({ loading: false, error: error.message });
-        else setState({ loading: false, household: data.household, account: data.account, members: data.members });
+        else setState({ loading: false, ...data });
       } catch (e) {
         if (!cancelled) setState({ loading: false, error: String(e?.message ?? e) });
       }
