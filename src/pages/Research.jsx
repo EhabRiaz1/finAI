@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Search, Sparkles, Star } from "lucide-react";
+import { Phone, Search, Sparkles, Star } from "lucide-react";
 import { COLORS, fmtMcap, fmtMoney, fmtPct, MONO, SANS, SERIF } from "../lib/theme";
 import { Panel, PanelHeader, MetricCell } from "../components/ui";
 import { TVAdvancedChart, TVCompanyProfile, TVFundamentalData, TVScreener, TVSymbolInfo } from "../components/TradingView";
@@ -222,7 +222,15 @@ export default function Research({ equities, holdings, watchlist, selected, setS
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>
                 <Panel style={{ height: 460, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-                  <PanelHeader title="About" />
+                  <PanelHeader title="About" right={q?.sector ?? ""} />
+                  {q && (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${COLORS.border}` }}>
+                      <MiniStat label="Mkt Cap" value={q.mcap ? fmtMcap(q.mcap) : "—"} />
+                      <MiniStat label="P/E" value={q.pe ? q.pe.toFixed(1) : "—"} />
+                      <MiniStat label="Beta" value={q.beta ? q.beta.toFixed(2) : "—"} />
+                      <MiniStat label="Div Yield" value={q.div ? `${q.div.toFixed(2)}%` : "—"} />
+                    </div>
+                  )}
                   <div style={{ flex: 1, minHeight: 0 }}>
                     <TVCompanyProfile symbol={symbol} height="100%" />
                   </div>
@@ -235,37 +243,37 @@ export default function Research({ equities, holdings, watchlist, selected, setS
                 </Panel>
               </div>
 
-              {/* Ask Finance AI for a deep-dive verdict on this stock */}
+              {/* Ask Finance AI · or call a FinanceAI-approved advisor */}
               <div style={{ marginTop: 18, paddingBottom: 8 }}>
-                <button
-                  onClick={runAnalysis}
-                  disabled={analyzing || streaming}
-                  style={{
-                    all: "unset",
-                    boxSizing: "border-box",
-                    width: "100%",
-                    textAlign: "center",
-                    cursor: analyzing || streaming ? "wait" : "pointer",
-                    padding: "22px 0",
-                    border: `1px solid ${COLORS.amber}`,
-                    background: "rgba(245,165,36,0.06)",
-                    color: COLORS.amber,
-                    fontFamily: SERIF,
-                    fontStyle: "italic",
-                    fontSize: 22,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 12,
-                  }}
-                  onMouseEnter={(e) => { if (!analyzing && !streaming) e.currentTarget.style.background = "rgba(245,165,36,0.14)"; }}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(245,165,36,0.06)")}
-                >
-                  <Sparkles size={20} />
-                  {analyzing ? `Analyzing ${symbol}…` : `What does Finance AI think of ${symbol}?`}
-                </button>
-                <div style={{ fontFamily: SANS, fontSize: 11, color: COLORS.textMute, textAlign: "center", marginTop: 8 }}>
-                  Opens a deep-dive in the AI panel and saves a Buy / Hold / Sell verdict below the stock.
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "stretch" }}>
+                  <button
+                    onClick={runAnalysis}
+                    disabled={analyzing || streaming}
+                    style={{ ...ctaBtn(COLORS.amber), cursor: analyzing || streaming ? "wait" : "pointer", background: "rgba(245,165,36,0.06)" }}
+                    onMouseEnter={(e) => { if (!analyzing && !streaming) e.currentTarget.style.background = "rgba(245,165,36,0.14)"; }}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(245,165,36,0.06)")}
+                  >
+                    <Sparkles size={20} />
+                    <span>{analyzing ? `Analyzing ${symbol}…` : `What does Finance AI think of ${symbol}?`}</span>
+                  </button>
+
+                  <a
+                    href="tel:+14019992799"
+                    style={{ ...ctaBtn(COLORS.cyan), textDecoration: "none", background: "rgba(34,211,238,0.06)" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(34,211,238,0.14)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(34,211,238,0.06)")}
+                  >
+                    <Phone size={19} />
+                    <span>Talk to a FinanceAI-approved financial advisor</span>
+                  </a>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 8 }}>
+                  <div style={{ fontFamily: SANS, fontSize: 11, color: COLORS.textMute, textAlign: "center" }}>
+                    Opens a deep-dive in the AI panel and saves a Buy / Hold / Sell verdict.
+                  </div>
+                  <div style={{ fontFamily: SANS, fontSize: 11, color: COLORS.textMute, textAlign: "center" }}>
+                    Connects you to a licensed advisor · +1 (401) 999-2799
+                  </div>
                 </div>
               </div>
             </>
@@ -302,6 +310,37 @@ function RecommendationBadge({ rating }) {
         <span style={{ fontFamily: MONO, fontWeight: 700, letterSpacing: 1, color: tone }}>{rating.rating}</span>
       </div>
       {when && <div style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 10, color: COLORS.textMute, letterSpacing: 0.5 }}>{when}</div>}
+    </div>
+  );
+}
+
+// Shared style for the two equal call-to-action buttons (AI / advisor).
+function ctaBtn(color) {
+  return {
+    all: "unset",
+    boxSizing: "border-box",
+    width: "100%",
+    height: "100%",
+    textAlign: "center",
+    padding: "20px 18px",
+    border: `1px solid ${color}`,
+    color,
+    fontFamily: SERIF,
+    fontStyle: "italic",
+    fontSize: 19,
+    lineHeight: 1.2,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  };
+}
+
+function MiniStat({ label, value }) {
+  return (
+    <div>
+      <div style={{ fontFamily: MONO, fontSize: 8.5, color: COLORS.textMute, letterSpacing: 1, textTransform: "uppercase" }}>{label}</div>
+      <div style={{ fontFamily: MONO, fontSize: 13, color: COLORS.text, marginTop: 2 }}>{value}</div>
     </div>
   );
 }
