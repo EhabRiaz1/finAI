@@ -92,11 +92,11 @@ export default function Balances({ equities, holdings, balances, onUpdateBuyingP
               <div style={{ textAlign: "right" }}>{r.shares.toLocaleString()}</div>
               <div style={{ textAlign: "right", color: COLORS.textDim }}>{fmtMoney(r.price)}</div>
               <div style={{ textAlign: "right" }}>{fmtMoney0(r.mv)}</div>
-              <div style={{ textAlign: "right", color: COLORS.textDim }}>{totalValue ? ((r.mv / totalValue) * 100).toFixed(1) : "0"}%</div>
+              <div style={{ textAlign: "right", color: COLORS.textDim }}>{totalValue ? ((r.mv / totalValue) * 100).toFixed(2) : "0"}%</div>
             </div>
           ))}
           <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr 0.9fr 1fr 0.8fr", padding: "10px 16px", fontFamily: MONO, fontSize: 12, color: COLORS.textDim, background: COLORS.panelHi }}>
-            <div>CASH</div><div /><div /><div style={{ textAlign: "right" }}>{fmtMoney0(cash)}</div><div style={{ textAlign: "right" }}>{totalValue ? ((cash / totalValue) * 100).toFixed(1) : "0"}%</div>
+            <div>CASH</div><div /><div /><div style={{ textAlign: "right" }}>{fmtMoney0(cash)}</div><div style={{ textAlign: "right" }}>{totalValue ? ((cash / totalValue) * 100).toFixed(2) : "0"}%</div>
           </div>
         </Panel>
 
@@ -109,7 +109,7 @@ export default function Balances({ equities, holdings, balances, onUpdateBuyingP
                 <div key={sector} style={{ marginBottom: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontFamily: SANS, fontSize: 12, color: COLORS.textDim, marginBottom: 4 }}>
                     <span>{sector}</span>
-                    <span style={{ fontFamily: MONO, color: COLORS.text }}>{pct.toFixed(1)}%</span>
+                    <span style={{ fontFamily: MONO, color: COLORS.text }}>{pct.toFixed(2)}%</span>
                   </div>
                   <div style={{ height: 6, background: COLORS.border }}>
                     <div style={{ height: "100%", width: `${pct}%`, background: COLORS.amber }} />
