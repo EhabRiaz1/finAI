@@ -5,6 +5,7 @@ import { useChat } from "../ai/ChatProvider";
 import ChatThread from "../ai/ChatThread";
 import ChatHistory from "../ai/ChatHistory";
 import ArtifactPanel from "../ai/ArtifactPanel";
+import ReportPanel from "../ai/ReportPanel";
 
 /* ------------------------------------------------------------------
    AI ANALYST — full-page chat. Shares conversation state with the
@@ -12,11 +13,11 @@ import ArtifactPanel from "../ai/ArtifactPanel";
    ------------------------------------------------------------------ */
 
 const SUGGESTIONS = [
+  "Generate a professional equity research report on a stock",
   "Analyze my portfolio's concentration and biggest risks",
   "I just bought a stock — help me log it",
   "Review my last 20 trades and grade each decision",
   "Which of my sells did I mistime? Show the what-if",
-  "What patterns do you see in my losing trades?",
   "What should I trim or add right now? Check the latest news first.",
 ];
 
@@ -88,7 +89,7 @@ export default function AIAnalyst() {
               title="Drag to resize"
             />
             <div style={{ width: artifactWidth, flexShrink: 0, minHeight: 0 }}>
-              <ArtifactPanel />
+              {activeArtifact.kind === "report" ? <ReportPanel /> : <ArtifactPanel />}
             </div>
           </>
         )}

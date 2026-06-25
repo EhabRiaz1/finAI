@@ -8,6 +8,7 @@
    ------------------------------------------------------------------ */
 
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { computeReportModel } from "../_shared/valuation.js";
 
 export interface ToolOutcome {
   content: string;
@@ -16,7 +17,29 @@ export interface ToolOutcome {
   // Staged spreadsheet edits — index.ts streams these as an `artifact_edit`
   // SSE event; nothing is persisted until the user clicks Apply client-side.
   artifactEdit?: { artifact_id: string; sheet: number; edits: { row: number; col: number; value: unknown; old: unknown }[] };
+  // Open a freshly-created artifact (e.g. a research report) in the side panel.
+  artifactOpen?: { artifact_id: string; kind: string };
+  // Live patch of a research report's narrative section (streamed to the panel).
+  reportPatch?: { artifact_id: string; section: string; markdown: string; status: string };
 }
+
+/** Ordered narrative sections of the equity research report (mirrors Report.pdf). */
+export const REPORT_SECTIONS = [
+  { key: "exec_summary", title: "Executive Summary" },
+  { key: "industry", title: "Industry & Strategic Analysis" },
+  { key: "accounting", title: "Accounting Analysis" },
+  { key: "financial", title: "Financial Analysis" },
+  { key: "forecast", title: "Forecasting" },
+  { key: "valuation", title: "Valuation" },
+  { key: "recommendation", title: "Recommendation" },
+] as const;
+const REPORT_SECTION_KEYS = new Set(REPORT_SECTIONS.map((s) => s.key));
+const r2 = (v: unknown, d = 2): number | null => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  const f = 10 ** d;
+  return Math.round(n * f) / f;
+};
 
 const S = (desc: string, props: Record<string, unknown>, required: string[] = []) => ({
   description: desc,
@@ -305,6 +328,29 @@ export const TOOLS = [
       ["artifact_id", "start", "values"],
     ),
   },
+
+  /* ------------------- equity research report ------------------- */
+  {
+    name: "generate_research_report",
+    ...S(
+      "Generate a professional, multi-method equity valuation report (Abnormal Earnings [primary] + DCF cross-check + trading multiples + ROE mean-reversion scenarios + sensitivity grids) for a stock, as a LIVE document artifact. This fetches real fundamentals and computes EVERY number deterministically with a locked valuation engine — you MUST NOT invent, alter, or recompute any figure. Call this ONCE, after confirming the exact company/ticker with the user. It opens the report panel with all tables and the valuation already filled in; afterward you write each narrative section with write_report_section. Scope: profitable, non-financial operating companies (banks/insurers/REITs and loss-makers are refused). Best coverage for US filers; international/IFRS may be degraded.",
+      { ticker: str("Stock ticker symbol, e.g. AAPL, NVDA, TSM. Uppercased.") },
+      ["ticker"],
+    ),
+  },
+  {
+    name: "write_report_section",
+    ...S(
+      "Write ONE narrative section of an open research report created by generate_research_report. Use ONLY the locked numbers from that tool's result and the company's real qualitative profile — never invent figures, and label any qualitative judgement as analyst commentary. The numeric tables are already rendered by the report: do NOT repeat them, ADD analysis, context and interpretation around them. Write tight institutional GFM markdown. Set finalize:true on the LAST section (recommendation) to mark the report complete.",
+      {
+        artifact_id: str("The report artifact id from generate_research_report."),
+        section: { type: "string", enum: REPORT_SECTIONS.map((s) => s.key), description: "Which section to write." },
+        markdown: str("The section's narrative as GitHub-flavored markdown prose."),
+        finalize: { type: "boolean", description: "Set true ONLY on the final (recommendation) section to mark the report complete." },
+      },
+      ["artifact_id", "section", "markdown"],
+    ),
+  },
 ] as const;
 
 export const WRITE_TOOLS = new Set([
@@ -349,6 +395,8 @@ export const TOOL_STATUS: Record<string, string> = {
   read_artifact: "Reading the spreadsheet…",
   set_cells: "Proposing cell edits…",
   set_range: "Proposing edits…",
+  generate_research_report: "Building the research report…",
+  write_report_section: "Writing the report…",
 };
 
 /** Short human-readable action label for confirmation cards. */
@@ -809,6 +857,78 @@ export async function executeTool(sb: Sb, name: string, input: Record<string, un
         return {
           content: JSON.stringify({ staged: edits.length, start: formatA1D(anchor.row, anchor.col), rows: values.length }),
           artifactEdit: { artifact_id: String(input.artifact_id), sheet: res.sheetIdx, edits },
+        };
+      }
+
+      case "generate_research_report": {
+        const ticker = String(input.ticker ?? "").trim().toUpperCase();
+        if (!/^[A-Z0-9.\-]{1,12}$/.test(ticker)) return fail("Invalid ticker format.");
+
+        // Fetch real fundamentals (caller-authenticated edge function).
+        const { data: fr, error: fe } = await sb.functions.invoke("get-fundamentals", { body: { ticker } });
+        if (fe) return fail(`Could not fetch fundamentals for ${ticker}: ${fe.message ?? fe}`);
+        const fundamentals = (fr as Record<string, unknown>)?.fundamentals;
+        if (!fundamentals) return fail(`No fundamentals available for ${ticker}.`);
+
+        // Deterministic, locked valuation — the AI never recomputes these.
+        const model = computeReportModel(fundamentals);
+        if (!model.ok) {
+          return fail(`${ticker} is out of scope for this report: ${model.gate?.reason ?? "unsupported"}. Tell the user this company needs a different (e.g. financials-specific) valuation approach.`);
+        }
+
+        const data = {
+          status: "generating",
+          model,
+          narrative: {},
+          meta: model.meta,
+          sources: (fundamentals as Record<string, unknown>).dataQuality ?? {},
+          sections: REPORT_SECTIONS,
+        };
+        const name = `${model.meta.name ?? ticker} — Equity Research`;
+        const { data: row, error } = await sb.from("ai_artifacts").insert({ name, kind: "report", data }).select("id").single();
+        if (error) return fail(`Could not create the report: ${error.message}`);
+
+        // Return a COMPACT summary (not the full model) so chat history stays small.
+        const vs = model.valuationSummary;
+        const summary = {
+          artifact_id: row.id,
+          company: model.meta.name, ticker: model.meta.ticker, currency: model.meta.currency,
+          current_price: r2(model.meta.currentPrice),
+          locked_valuation_per_share: {
+            abnormal_earnings: r2(model.abnormalEarnings.perShare),
+            dcf: r2(model.dcf.perShare),
+            pe_multiple: r2(model.multiples.peShare),
+            ev_ebitda_multiple: r2(model.multiples.evEbitdaShare),
+            blended_median: r2(vs?.median),
+          },
+          implied_upside_pct: r2((vs?.impliedUpside ?? 0) * 100, 1),
+          model_signal: vs?.signal,
+          wacc_pct: r2(model.costOfCapital.wacc * 100), cost_of_equity_pct: r2(model.costOfCapital.ke * 100),
+          latest_roe_pct: r2((model.historical.latestRoe ?? 0) * 100, 1),
+          fiscal_years: model.meta.fiscalYears,
+          data_quality_warnings: model.dataQuality.warnings,
+          instructions: "The report panel now shows every table and the full valuation. Write each narrative section with write_report_section in order (exec_summary → recommendation), referencing ONLY these locked numbers. Do not restate the tables. Finalize on the recommendation section.",
+          sections_to_write: REPORT_SECTIONS,
+        };
+        return { content: JSON.stringify(summary), artifactOpen: { artifact_id: row.id, kind: "report" } };
+      }
+
+      case "write_report_section": {
+        const id = String(input.artifact_id ?? "");
+        const section = String(input.section ?? "");
+        const markdown = String(input.markdown ?? "");
+        if (!REPORT_SECTION_KEYS.has(section)) return fail(`Unknown section "${section}". Valid: ${[...REPORT_SECTION_KEYS].join(", ")}.`);
+        const { data: row, error } = await sb.from("ai_artifacts").select("data, kind").eq("id", id).single();
+        if (error || !row) return fail("Report artifact not found (or not yours).");
+        if (row.kind !== "report") return fail("That artifact is not a research report.");
+        const data = (row.data ?? {}) as Record<string, unknown>;
+        data.narrative = { ...((data.narrative as Record<string, unknown>) ?? {}), [section]: markdown };
+        if (input.finalize === true) data.status = "complete";
+        const { error: ue } = await sb.from("ai_artifacts").update({ data, updated_at: new Date().toISOString() }).eq("id", id);
+        if (ue) return fail(ue.message);
+        return {
+          content: JSON.stringify({ ok: true, section, status: data.status ?? "generating" }),
+          reportPatch: { artifact_id: id, section, markdown, status: String(data.status ?? "generating") },
         };
       }
 

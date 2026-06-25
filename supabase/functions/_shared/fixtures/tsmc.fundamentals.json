@@ -1,0 +1,44 @@
+{
+  "_comment": "Frozen golden fixture — TSMC (Taiwan Semiconductor) FY2020-2025, TWD millions. Derived from the source BAV report's published figures so the engine's valuation pipeline can be regression-tested without a live fetch. Statement line items are reconstructed from the report's published margins x revenue; balance-sheet series is back-solved from the report's published DuPont ratios so ROE/turnover/equity-multiplier reproduce.",
+  "ticker": "TSM",
+  "name": "Taiwan Semiconductor Manufacturing Company",
+  "exchange": "TWSE",
+  "sector": "Semiconductors",
+  "currency": "TWD",
+  "asOf": "2026-04-24",
+  "price": 2185,
+  "sharesOut": 25930,
+  "beta": 1.25,
+  "riskFreeRate": 0.014,
+  "analystY1Growth": 0.35,
+  "industryMedianRoe": 0.15,
+  "bookValueEquity": 5355039,
+  "netDebt": -2000078,
+  "years": [2020, 2021, 2022, 2023, 2024, 2025],
+  "revenue": [1339255, 1587415, 2263891, 2161736, 2894308, 3809054],
+  "grossProfit": [711144, 819106, 1349279, 1175984, 1623707, 2281623],
+  "operatingIncome": [566505, 650840, 1122890, 920899, 1322699, 1934999],
+  "ebitda": [894622, 1068330, 1555293, 1448363, 1979707, 2616820],
+  "netIncome": [511635, 592106, 993848, 851724, 1157723, 1695125],
+  "pretaxIncome": [585395, 662311, 1144986, 980120, 1406711, 2042319],
+  "incomeTaxExpense": [73760, 70205, 151138, 128396, 248988, 347194],
+  "totalAssets": [2745995, 3731407, 4967927, 5544057, 6646537, 7951707],
+  "totalEquity": [1830663, 2143203, 2914549, 3417971, 4249069, 5355039],
+  "totalDebt": [800000, 850000, 900000, 950000, 1000000, 1068000],
+  "cashAndSTInvest": [1500000, 1800000, 2100000, 2400000, 2700000, 3068078],
+  "peers": [
+    { "ticker": "2303.TW", "name": "United Microelectronics", "grossMargin": 0.29, "ebitdaMargin": 0.424, "operatingMargin": 0.185, "netMargin": 0.176, "revGrowth1y": 0.023, "debtToCapital": 0.172, "pe": 22.0, "evEbitda": 8.3 },
+    { "ticker": "2454.TW", "name": "MediaTek", "grossMargin": 0.475, "ebitdaMargin": 0.21, "operatingMargin": 0.174, "netMargin": 0.177, "revGrowth1y": 0.123, "debtToCapital": 0.024, "pe": 36.9, "evEbitda": 28.9 },
+    { "ticker": "AVGO", "name": "Broadcom", "grossMargin": 0.767, "ebitdaMargin": 0.545, "operatingMargin": 0.419, "netMargin": 0.366, "revGrowth1y": 0.252, "debtToCapital": 0.453, "pe": 82.4, "evEbitda": 54.9 },
+    { "ticker": "000660.KS", "name": "SK hynix", "grossMargin": 0.596, "ebitdaMargin": 0.693, "operatingMargin": 0.586, "netMargin": 0.569, "revGrowth1y": 0.85, "debtToCapital": 0.105, "pe": 12.1, "evEbitda": 9.5 },
+    { "ticker": "AMD", "name": "Advanced Micro Devices", "grossMargin": 0.525, "ebitdaMargin": 0.195, "operatingMargin": 0.108, "netMargin": 0.125, "revGrowth1y": 0.343, "debtToCapital": 0.06, "pe": 133.3, "evEbitda": 79.3 }
+  ],
+  "dataQuality": {
+    "sources": {
+      "statements": "frozen-fixture (BAV report)",
+      "price": "frozen-fixture",
+      "beta": "frozen-fixture"
+    },
+    "warnings": []
+  }
+}

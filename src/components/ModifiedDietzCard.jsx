@@ -2,8 +2,9 @@ import React from "react";
 import { COLORS, fmtMoney0, MONO, SANS, SERIF } from "../lib/theme";
 
 /* ------------------------------------------------------------------
-   Dashboard card: YTD return via the Modified Dietz method, for the
-   caller's own account only. Marked BETA. See docs/modified-dietz.md.
+   Dashboard card: Modified Dietz return for the caller's own account.
+   Period label is data-driven (`data.label`): "Since inception" when the
+   account has a reset baseline, else "YTD". See docs/modified-dietz.md.
    ------------------------------------------------------------------ */
 
 function pct(x) {
@@ -32,7 +33,7 @@ export default function ModifiedDietzCard({ data }) {
         <>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
             <div style={{ fontFamily: SERIF, fontSize: 32, color: tone, lineHeight: 1 }}>{pct(ret)}</div>
-            <div style={{ fontFamily: MONO, fontSize: 10, color: COLORS.textDim, letterSpacing: 0.5 }}>YTD</div>
+            <div style={{ fontFamily: MONO, fontSize: 10, color: COLORS.textDim, letterSpacing: 0.5, textTransform: "uppercase" }}>{data?.label ?? "YTD"}</div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px", marginTop: 12 }}>
             <Stat label="Start value" value={`$${fmtMoney0(data.bmv)}`} />

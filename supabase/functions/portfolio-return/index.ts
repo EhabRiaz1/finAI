@@ -2,11 +2,18 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 /* ------------------------------------------------------------------
-   PORTFOLIO RETURN — single-account Modified Dietz (YTD).
-   Computes the caller's OWN account return only (the logged-in
-   user_id). Inter-account transfers (cash_transactions.type='transfer')
-   are treated as external cash flows, so moving money in or out does
-   not inflate or deflate the measured return.
+   PORTFOLIO RETURN — single-account Modified Dietz.
+   Computes the caller's OWN account return only (the logged-in user_id).
+
+   Window:
+   - If the caller has a row in portfolio_return_baseline, the return is
+     measured SINCE INCEPTION: start = that inception_date, BMV = the
+     stored baseline_value, and inter-account transfers are treated as
+     in-kind (NOT cash flows) so funding the sleeve doesn't distort it.
+     This lets an account "reset to 0%" from a chosen date and accrue
+     real performance forward.
+   - Otherwise it falls back to YTD (start = Jan 1), with transfers
+     treated as external cash flows.
    ------------------------------------------------------------------ */
 
 const CORS = {
@@ -37,9 +44,13 @@ function modifiedDietz(bmv: number, emv: number, flows: { date: string; amount: 
   return { ret: (emv - bmv - F) / denom, bmv, emv, netFlows: F, gain: emv - bmv - F };
 }
 
-async function computeReturn(sb: Json, userIds: string[], inclTransfer: boolean) {
+type Baseline = { inception_date: string; baseline_value: number } | null;
+
+async function computeReturn(sb: Json, userIds: string[], opts: { inclTransfer: boolean; baseline: Baseline }) {
+  const { inclTransfer, baseline } = opts;
   const now = new Date();
-  const start = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+  // Since-inception when a baseline is set; otherwise YTD (Jan 1).
+  const start = baseline ? new Date(baseline.inception_date) : new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
   const startMs = start.getTime();
 
   const [hold, tx, cashTx, divs, bals, bondRes] = await Promise.all([
@@ -118,7 +129,9 @@ async function computeReturn(sb: Json, userIds: string[], inclTransfer: boolean)
     if (px != null) bmvEquity += sh * px;
   }
   const cashStart = cashNow - netCashAfter;
-  const bmv = bmvEquity + bmvBonds + cashStart;
+  // Since-inception: BMV is the stored baseline value (the portfolio's worth at
+  // the reset). YTD: BMV is reconstructed from the start-of-year ledger.
+  const bmv = baseline ? Number(baseline.baseline_value) : bmvEquity + bmvBonds + cashStart;
 
   let emvEquity = 0;
   for (const [ticker, sh] of sharesNow) emvEquity += sh * (quotes.get(ticker) ?? costNow.get(ticker) ?? 0);
@@ -130,7 +143,15 @@ async function computeReturn(sb: Json, userIds: string[], inclTransfer: boolean)
 
   const r = modifiedDietz(bmv, emv, flows, startMs, now.getTime());
   if (!r) return { ready: false };
-  return { ready: true, ...r, cashStart, asOf: now.toISOString() };
+  return {
+    ready: true,
+    ...r,
+    cashStart,
+    asOf: now.toISOString(),
+    mode: baseline ? "inception" : "ytd",
+    label: baseline ? "Since inception" : "YTD",
+    startDate: start.toISOString(),
+  };
 }
 
 Deno.serve(async (req: Request) => {
@@ -147,8 +168,14 @@ Deno.serve(async (req: Request) => {
   const admin = createClient(url, service, { auth: { autoRefreshToken: false, persistSession: false } });
 
   try {
-    // Single account: the caller's own user_id, transfers treated as external.
-    const result = await computeReturn(admin, [user.id], true);
+    // Since-inception (transfers in-kind) when the caller has a baseline; else
+    // YTD with transfers treated as external flows.
+    const { data: baseline } = await admin
+      .from("portfolio_return_baseline")
+      .select("inception_date, baseline_value")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const result = await computeReturn(admin, [user.id], { inclTransfer: !baseline, baseline: baseline ?? null });
     return json(result);
   } catch (e) {
     return json({ error: String((e as Error)?.message ?? e) }, 500);

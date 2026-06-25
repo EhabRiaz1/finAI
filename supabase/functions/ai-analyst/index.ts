@@ -256,6 +256,8 @@ Deno.serve(async (req: Request) => {
               } else {
                 const outcome = await executeTool(supabase, tu.name, tu.input ?? {});
                 if (outcome.artifactEdit) send({ type: "artifact_edit", ...outcome.artifactEdit });
+                if (outcome.artifactOpen) send({ type: "artifact_open", ...outcome.artifactOpen });
+                if (outcome.reportPatch) send({ type: "report_patch", ...outcome.reportPatch });
                 resultBlocks.push({
                   type: "tool_result",
                   tool_use_id: tu.id,
@@ -334,6 +336,8 @@ Deno.serve(async (req: Request) => {
               const outcome = await executeTool(supabase, tu.name, tu.input ?? {});
               send({ type: "tool_activity", name: tu.name, label: TOOL_STATUS[tu.name] ?? tu.name, is_error: !!outcome.is_error });
               if (outcome.artifactEdit) send({ type: "artifact_edit", ...outcome.artifactEdit });
+              if (outcome.artifactOpen) send({ type: "artifact_open", ...outcome.artifactOpen });
+              if (outcome.reportPatch) send({ type: "report_patch", ...outcome.reportPatch });
               readResults.push({ tool_use_id: tu.id, content: outcome.content, is_error: outcome.is_error });
             }
 

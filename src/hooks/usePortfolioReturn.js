@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 /**
- * Single-account Modified Dietz YTD return, from the `portfolio-return` edge
- * function (the caller's own account only).
- * Returns { loading, ready, ret, bmv, emv, netFlows, gain, error }.
+ * Single-account Modified Dietz return from the `portfolio-return` edge function
+ * (the caller's own account only). Measured since-inception when the account has
+ * a reset baseline, else YTD — `label` says which.
+ * Returns { loading, ready, ret, bmv, emv, netFlows, gain, mode, label, error }.
  */
 export function usePortfolioReturn() {
   const [state, setState] = useState({ loading: true });

@@ -244,7 +244,7 @@ export function ChatProvider({ children, onDataChanged }) {
   const openArtifact = useCallback(async (id) => {
     try {
       const row = await loadArtifact(id);
-      setActiveArtifact({ id: row.id, name: row.name, data: row.data });
+      setActiveArtifact({ id: row.id, name: row.name, data: row.data, kind: row.kind ?? "spreadsheet" });
       setPanelOpen(true);
     } catch {
       /* artifact missing or not ours — ignore */
@@ -384,6 +384,33 @@ export function ChatProvider({ children, onDataChanged }) {
               });
               break;
             }
+            case "artifact_open": {
+              // A freshly-created artifact (e.g. a research report) — open it.
+              openArtifact(ev.artifact_id);
+              setPanelOpen(true);
+              break;
+            }
+            case "report_patch": {
+              // A research-report narrative section streamed in — apply live.
+              if (!activeArtifactRef.current || activeArtifactRef.current.id !== ev.artifact_id) {
+                openArtifact(ev.artifact_id); // reload picks up the persisted patch
+              } else {
+                setActiveArtifact((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        data: {
+                          ...prev.data,
+                          narrative: { ...(prev.data?.narrative ?? {}), [ev.section]: ev.markdown },
+                          status: ev.status ?? prev.data?.status,
+                        },
+                      }
+                    : prev,
+                );
+              }
+              setPanelOpen(true);
+              break;
+            }
             case "error":
               pushItem({ kind: "notice", text: `⚠︎ ${ev.message}` });
               break;
@@ -418,7 +445,9 @@ export function ChatProvider({ children, onDataChanged }) {
       if (trimmed) blocks.push({ type: "text", text: trimmed });
       for (const att of attachments) blocks.push(...attachmentToBlocks(att));
       const art = activeArtifactRef.current;
-      if (art && !attachments.some((a) => a.kind === "artifact")) {
+      if (art && art.kind === "report") {
+        blocks.push({ type: "text", text: `[Active research report — id=${art.id}, name="${art.name}", status=${art.data?.status ?? "generating"}. To continue or fix it, use write_report_section with this artifact_id (do not call generate_research_report again).]` });
+      } else if (art && !attachments.some((a) => a.kind === "artifact")) {
         const ov = artifactOverview(art.data).map((s) => `sheet "${s.name}" (${s.rows}×${s.cols})`).join("; ");
         blocks.push({ type: "text", text: `[Active spreadsheet artifact — id=${art.id}, name="${art.name}": ${ov}. Use read_artifact / set_cells with this artifact_id.]` });
       }

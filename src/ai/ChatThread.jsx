@@ -16,9 +16,9 @@ import ModelPicker from "./ModelPicker";
    ------------------------------------------------------------------ */
 
 const DEFAULT_SUGGESTIONS = [
+  "Generate a professional equity research report on a stock",
   "Analyze my portfolio's concentration and biggest risks",
   "I just bought a stock — help me log it",
-  "Review my trading decisions and grade each one",
   "What should I trim or add right now? Check the latest news first.",
 ];
 
